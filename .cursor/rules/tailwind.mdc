@@ -1,0 +1,25 @@
+---
+description: Tailwind CSS v4 styling conventions for this project
+globs: src/**/*.tsx,src/**/*.css
+alwaysApply: false
+---
+
+# Tailwind CSS
+
+This project uses **Tailwind CSS v4**, which is configured in CSS rather than JavaScript.
+
+- There is no `tailwind.config.ts` or `tailwind.config.js`, and one should not be created.
+  All configuration lives in `src/app/globals.css` via `@import "tailwindcss"`,
+  `@theme`, and `@custom-variant`.
+- Design tokens are defined as CSS variables in `globals.css` and exposed through
+  `@theme inline`. Add new tokens there rather than inventing one-off values.
+
+## Styling
+
+- Apply utility classes through `className`. Do not add CSS modules or a styling library.
+- Reference semantic theme tokens, for example `bg-background`, `text-foreground`,
+  `text-muted-foreground`, and `border-input`, instead of literal colors like
+  `bg-[#171717]`. This keeps light and dark mode working.
+- Merge conditional classes with the `cn()` helper from `@/lib/utils`.
+- Write plain CSS in `globals.css` only for genuinely global concerns such as base
+  element styles or keyframes.

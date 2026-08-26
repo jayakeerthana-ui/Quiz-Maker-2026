@@ -1,0 +1,53 @@
+---
+description: shadcn/ui component conventions for this project
+globs: src/**/*.tsx
+alwaysApply: false
+---
+
+# shadcn/ui Components
+
+This project is initialized with shadcn/ui built on **Base UI** (not Radix), using the
+`base-nova` style with Lucide icons. Configuration lives in `components.json`.
+
+## Available components
+
+Already installed in `src/components/ui/`:
+
+`badge` `button` `card` `dialog` `field` `input` `label` `separator` `table`
+
+Import them from the `@/components/ui` alias:
+
+```tsx
+import { Button } from "@/components/ui/button";
+```
+
+## Adding components
+
+Components are source files copied into this repo, not npm packages. To add one:
+
+```bash
+npx shadcn@latest add @shadcn/select
+```
+
+Always include the `@shadcn/` namespace. A bare name such as `add select` silently
+does nothing. If a component produces no files, it does not exist for the Base UI
+base, so check for an equivalent before assuming the command failed.
+
+## Usage
+
+- Prefer these components over raw `<button>`, `<input>`, or `<table>` elements.
+- Customize through props and Tailwind classes. Do not rewrite the base files in
+  `src/components/ui/` unless the user asks for a deliberate change to the design system.
+- Compose class names with the `cn()` helper from `@/lib/utils` so Tailwind conflicts
+  resolve correctly.
+- Use the theme tokens defined in `src/app/globals.css`, for example `bg-background`,
+  `text-muted-foreground`, and `border-destructive`. Do not hard-code hex colors.
+
+## Forms
+
+There is no `Form` component under Base UI. The form primitive is `field`, which provides
+`FieldSet`, `FieldGroup`, `Field`, `FieldLabel`, `FieldDescription`, and `FieldError`.
+
+Build forms as Server Actions validated with Zod, and surface errors through `FieldError`,
+which accepts an array of `{ message }` objects. Do not introduce `react-hook-form`
+without asking the user first.

@@ -1,0 +1,38 @@
+---
+description: Cloudflare Workers configuration and deployment conventions for this project
+globs: wrangler.jsonc,open-next.config.ts,next.config.ts,cloudflare-env.d.ts
+alwaysApply: false
+---
+
+# Cloudflare Workers and Deployment
+
+This app runs on Cloudflare Workers via `@opennextjs/cloudflare`, not on Node or Vercel.
+Code must be compatible with the Workers runtime.
+
+## Configuration
+
+- Worker configuration lives in `wrangler.jsonc`. Note the `.jsonc` extension: comments are allowed.
+- Keep `nodejs_compat` in `compatibility_flags`. OpenNext requires it for Next.js.
+- Add resource bindings (D1, R2, KV, AI) to `wrangler.jsonc`, then run `npm run cf-typegen`
+  to regenerate `cloudflare-env.d.ts` so the bindings are typed.
+- Never edit `cloudflare-env.d.ts` by hand. It is generated.
+
+## Runtime constraints
+
+- No Node built-ins beyond what `nodejs_compat` provides. Avoid `fs` and native modules.
+- Access bindings through `getCloudflareContext()` from `@opennextjs/cloudflare`,
+  not through a global `env`.
+
+## Secrets and environment
+
+- Local values go in `.dev.vars`, which is gitignored. Keep `.dev.vars.example` current
+  whenever a new variable is introduced.
+- Production values are set with `npx wrangler secret put NAME`. Never commit a secret
+  and never write one into `wrangler.jsonc`.
+
+## Deployment
+
+- `npm run preview` builds and runs the app on the local Workers runtime. Prefer this over
+  `npm run dev` when verifying anything runtime-specific, since `npm run dev` uses Node.
+- `npm run deploy` builds and deploys to Cloudflare.
+- Do not run `npm run deploy` unless the user explicitly asks you to deploy.

@@ -1,0 +1,37 @@
+---
+description: Next.js App Router conventions for this project
+globs: src/**/*.ts,src/**/*.tsx
+alwaysApply: false
+---
+
+# Next.js Application Rules
+
+This project uses the Next.js App Router with React Server Components.
+
+## Structure
+
+- All routes live under `src/app/`. Do not create a `pages/` directory.
+- Shared UI goes in `src/components/`, grouped into subdirectories by feature.
+- Logic shared across routes goes in `src/lib/`, with domain logic under `src/lib/services/`.
+- Import with the `@/` alias, for example `@/components/Button`, rather than relative
+  paths that climb directories.
+
+## Server and client components
+
+- Components are Server Components by default. Add `'use client'` only when the component
+  needs state, effects, or browser APIs.
+- Push `'use client'` as far down the tree as possible so that data fetching stays on the server.
+- Never import server-only code such as database clients into a client component.
+
+## Data flow
+
+- Use Server Actions for form submissions and mutations. Reach for a route handler in
+  `src/app/api/` only when you need an HTTP endpoint for an external consumer.
+- Validate all Server Action and route handler input with a Zod schema before use.
+  Treat every input as untrusted.
+- Prefer the URL for state that should be shareable or survive a reload.
+
+## Notes
+
+- This project has no client state management library installed. If one becomes necessary,
+  raise it with the user before adding it.
