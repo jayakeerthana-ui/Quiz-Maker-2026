@@ -7,7 +7,7 @@ Date last modified: 2026-09-02
 
 Quiz Maker’s authentication foundation lands teachers on a placeholder MCQ Management page (`/mcq`) that states question CRUD is not available yet. Teachers still have no way to create, inspect, edit, or remove multiple-choice questions, and there is no D1 schema for questions, answer choices, or recorded attempts. This feature replaces that stub with a shared test-bank workspace: a table of questions (short name plus the question stem), a dedicated create/edit page, a preview, deletion, attribution of each MCQ to the creating user, and the service/API layers needed to persist questions, choices, and attempts.
 
-**As of 2026-09-02:** Phase 1 (schema) is complete in the repo: `migrations/0002_create_mcq_tables.sql` and `migrations/mcq.schema.test.ts`. Phases 2–5 are not started. Wait for review before Phase 2.
+**As of 2026-09-02:** Phases 1–2 are complete on `feature/mcq-crud`. Schema SQL and MCQ Service exist; APIs and UI are not started. Wait for review before Phase 3.
 
 ---
 
@@ -380,17 +380,17 @@ Typed errors (mirror `UserConflictError`):
 | `McqChoiceInUseError`    | Deleting a choice that has attempts               | 409          |
 
 
-| Method | Responsibility |
-| ------ | -------------- |
-| `listMcqs()` | All questions, no choices, `created_at DESC` |
-| `getMcqById(id)` | Question plus choices ordered by `position`, or `null` |
-| `createMcq({ name, question, createdByUserId, choices })` | Verify `createdByUserId` exists in `users`; insert question + choices; enforce 2–6, exactly one correct, contiguous positions |
-| `updateMcq(id, { name, question, choices })` | Update name, question, and choices only (do not change `created_by_user_id`); insert/update/delete choices as specified; set `updated_at`; throw `McqChoiceInUseError` if a removed choice has attempts |
-| `deleteMcq(id)` | Delete question; return whether a row was removed (cascades choices and attempts) |
-| `createAttempt({ mcqId, userId, choiceId })` | Verify user, question, and that the choice belongs to the question; store snapshot `is_correct` |
-| `listAttemptsByMcqId(mcqId)` | Attempts for a question, newest first |
-| `listAttemptsByUserId(userId)` | Attempts for a user, newest first |
-| `getAttemptById(id)` | One attempt or `null` |
+| Method | Responsibility | Code |
+| ------ | -------------- | ---- |
+| `listMcqs()` | All questions, no choices, `created_at DESC` | `src/lib/services/mcq-service.ts:220` |
+| `getMcqById(id)` | Question plus choices ordered by `position`, or `null` | `src/lib/services/mcq-service.ts:227` |
+| `createMcq({ name, question, createdByUserId, choices })` | Verify `createdByUserId` exists in `users`; insert question + choices; enforce 2–6, exactly one correct, contiguous positions | `src/lib/services/mcq-service.ts:236` |
+| `updateMcq(id, { name, question, choices })` | Update name, question, and choices only (do not change `created_by_user_id`); insert/update/delete choices as specified; set `updated_at`; throw `McqChoiceInUseError` if a removed choice has attempts | `src/lib/services/mcq-service.ts:276` |
+| `deleteMcq(id)` | Delete question; return whether a row was removed (cascades choices and attempts) | `src/lib/services/mcq-service.ts:357` |
+| `createAttempt({ mcqId, userId, choiceId })` | Verify user, question, and that the choice belongs to the question; store snapshot `is_correct` | `src/lib/services/mcq-service.ts:366` |
+| `listAttemptsByMcqId(mcqId)` | Attempts for a question, newest first | `src/lib/services/mcq-service.ts:402` |
+| `listAttemptsByUserId(userId)` | Attempts for a user, newest first | `src/lib/services/mcq-service.ts:410` |
+| `getAttemptById(id)` | One attempt or `null` | `src/lib/services/mcq-service.ts:418` |
 
 Map rows with `toPublicMcq` / `toPublicChoice` / `toPublicAttempt` (`is_correct` → `isCorrect` boolean; `created_by_user_id` → `createdByUserId`).
 
@@ -604,7 +604,7 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 - `migrations/0002_create_mcq_tables.sql` filled in
 - `migrations/mcq.schema.test.ts`
 
-### Phase 2: MCQ Service - PLANNED
+### Phase 2: MCQ Service - COMPLETED
 
 **Objective**: Questions, choices, and attempts can be created, read, updated, and deleted through the service; invariants are enforced in one place.
 
@@ -632,8 +632,13 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 
 **Done when:**
 
-- `npm test` is **green** for MCQ Service tests plus Phase 1 and auth suites
-- No unit test talks to a real D1 database
+- `npm test` is **green** for MCQ Service tests plus Phase 1 and auth suites — **met** (53 passed, 11 files, 2026-09-02). First run was **red** (failed to resolve `@/lib/services/mcq-service`).
+- No unit test talks to a real D1 database — **met** (`mcq-service.test.ts` mocks `@/lib/db`)
+
+**What shipped:**
+
+- `src/lib/services/mcq-service.ts` — `McqNotFoundError` at `:5`; `McqValidationError` at `:21`; `McqChoiceInUseError` at `:28`; `createMcq` at `:236` (D1 `batch`); `updateMcq` at `:276`; `createAttempt` at `:366` snapshots `is_correct` from the stored choice
+- `src/lib/services/mcq-service.test.ts:275` — eleven tests against an in-memory fake D1
 
 **Deliverables:**
 
@@ -759,9 +764,9 @@ Fill line references as code is written. Until then, paths are the contract.
 - `migrations/0002_create_mcq_tables.sql:3` — `mcqs`; `mcq_choices` at `:15`; `mcq_attempts` at `:29`
 - `migrations/mcq.schema.test.ts:55` — schema tests (read SQL; no live D1)
 - `src/lib/db.ts` — existing `getDb()`; reuse, do not duplicate
+- `src/lib/services/mcq-service.ts` — only module that talks to D1 for MCQ/choices/attempts (`McqNotFoundError` at `:5`; `createMcq` at `:236`; `updateMcq` at `:276`; `createAttempt` at `:366`)
+- `src/lib/services/mcq-service.test.ts:27` — mocks `@/lib/db`; suite at `:275`
 - `src/lib/mcq-schemas.ts` — Zod for MCQ and attempt bodies
-- `src/lib/services/mcq-service.ts` — only module that talks to D1 for MCQ/choices/attempts
-- `src/lib/services/mcq-service.test.ts` — mocks `@/lib/db`
 - `src/app/api/mcqs/handler.ts` / `route.ts` — list + create
 - `src/app/api/mcqs/[id]/handler.ts` / `route.ts` — get + update + delete
 - `src/app/api/mcq-attempts/handler.ts` / `route.ts` — list + record
@@ -836,8 +841,8 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 ## Acceptance Criteria
 
 - [x] `mcqs`, `mcq_choices`, and `mcq_attempts` exist in the local D1 migration with the columns and foreign keys in this PRD (`mcqs` has `question` and `created_by_user_id`, and no `description`) — verified by `migrations/mcq.schema.test.ts` against the SQL files. This machine’s already-applied local D1 still has a stale `description` schema until local state is reset (see Phase 1).
-- [ ] A question cannot be saved with fewer than 2 or more than 6 choices
-- [ ] A question cannot be saved unless exactly one choice is marked correct
+- [x] A question cannot be saved with fewer than 2 or more than 6 choices — MCQ Service tests, 2026-09-02 (APIs not wired yet)
+- [x] A question cannot be saved unless exactly one choice is marked correct — MCQ Service tests, 2026-09-02 (APIs not wired yet)
 - [ ] `GET /api/mcqs` returns questions for the table (id, name, question, createdByUserId, timestamps)
 - [ ] `POST /api/mcqs` creates a question with name, question, createdByUserId, and choices, and returns 201
 - [ ] `POST /api/mcqs` returns 404 when `createdByUserId` does not match a user
@@ -1003,7 +1008,7 @@ Populate with real incidents as they are fixed. Anticipated issues:
 
 When working with this PRD:
 
-1. **Stop after each phase unless the user has approved the next one.** Phase 1 is done; do not start Phase 2 until review.
+1. **Stop after each phase unless the user has approved the next one.** Phase 2 is done; do not start Phase 3 until review.
 2. Start by reading Overview and Hypothesis: shared teacher test-bank CRUD, not sessions, not AI, not a student quiz runner.
 3. Use Scope (In/Out/Cut) as a hard boundary. Do not add JWT, cookies, OAuth, a `description` column, attempt-taking UI, or extra question types. Do persist `question` and `created_by_user_id` as specified.
 4. Follow the **TDD** cycle in Testing for Phases 1–4: write the listed tests first, run `npm test` (expect red), then implement until green. Do not implement first and retrofit tests. Phase 5 runs the accumulated suite; if a gap is found, still red then green.
@@ -1025,6 +1030,6 @@ When working with this PRD:
 ## Current Status
 
 **Last Updated**: 2026-09-02
-**Current Phase**: Phase 1 - Database Foundation
+**Current Phase**: Phase 2 - MCQ Service
 **Status**: COMPLETED (awaiting review)
-**Next Steps**: Review Phase 1. After approval, reset stale local D1 if needed, then begin Phase 2 (MCQ Service tests first). Do not start Phase 2 before that approval.
+**Next Steps**: Review Phase 2. After approval, begin Phase 3 (API handler tests first). Do not start Phase 3 before that approval.
