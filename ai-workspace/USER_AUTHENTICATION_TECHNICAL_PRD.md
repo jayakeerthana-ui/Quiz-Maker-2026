@@ -7,7 +7,7 @@ Date last modified: 2026-09-02
 
 Quiz Maker is a greenfield application for teachers who need to collaborate on a shared bank of multiple-choice questions. This foundation adds a User entity, hashed-password registration and login, and a logout path. After a successful registration or login, the teacher lands on a placeholder MCQ Management page that later sprints will replace with real question tools.
 
-**As of 2026-09-02:** Phases 1–4 are implemented on `feature/user-authentication`. D1 is bound, APIs and shadcn UI exist, and the teacher who owns this work has verified register, login, and logout in the running app. Phase 5 remains the formal completion gate (re-run `npm test` / lint / build and inspect D1 hashes).
+**As of 2026-09-02:** Phases 1–5 are complete on `feature/user-authentication`. D1 is bound, APIs and shadcn UI exist, and register / login (username and email) / logout were verified against D1. Stored `password_hash` values are 64-character hex, not plaintext.
 
 ---
 
@@ -549,9 +549,9 @@ Every implementation phase below follows the **TDD** cycle in Testing: write tes
 - `src/app/mcq/page.tsx:4` + `src/components/mcq-stub.tsx:14` — test-bank placeholder; **Log out** at `mcq-stub.tsx:18` (`POST /api/auth/logout`, then `/login` even on failure)
 - Tests: `login-form.test.tsx`, `signup-form.test.tsx`, `mcq-stub.test.tsx`
 
-**Manual verification (2026-09-02):** Register, login, and logout were exercised in the UI and succeeded. Phase 5 still re-runs the automated suite and inspects D1 for hashes-only.
+**Manual verification (2026-09-02):** Register, login, and logout were exercised in the UI and succeeded. Phase 5 re-ran the automated suite and inspected D1 hashes (see Phase 5).
 
-### Phase 5: Verification - PLANNED
+### Phase 5: Verification - COMPLETED
 
 **Objective**: The feature is proven by a green Vitest suite, lint, build, and a real user flow — not inspection alone.
 
@@ -564,20 +564,40 @@ This phase does not add a new red suite. It runs the accumulated tests as the co
 
 **Implementation / verification:**
 
-1. Run `npm run lint` and `npm run build` and record the actual result (Phase 4 already recorded 36 tests passed, lint 0 errors / 1 unused-arg warning, build succeeded — re-run as the official gate)
-2. Exercise register → `/mcq` → logout → login (by username) → `/mcq` and login (by email) (browser or `npm run preview` for D1). **Register, login, and logout were already verified in the UI on 2026-09-02**; Phase 5 still distinguishes login-by-username vs login-by-email if that split was not checked then.
+1. Run `npm run lint` and `npm run build` and record the actual result
+2. Exercise register → `/mcq` → logout → login (by username) → `/mcq` and login (by email)
 3. Confirm duplicate username and duplicate email are rejected; wrong credentials do not leak which identifier exists
 4. Confirm D1 stores only hashes
 
 **Done when:**
 
-- `npm test` is green
-- `npm run lint` and `npm run build` succeed (report actual output)
-- Manual happy path and duplicate/invalid-credential paths match the acceptance criteria
+- `npm test` is green — **met** (36 passed, 9 files, 2026-09-02 10:30)
+- `npm run lint` and `npm run build` succeed — **met** (lint: 0 errors, 1 unused `_request` warning in `src/app/api/auth/logout/handler.ts:3`; build succeeded with routes `/`, `/login`, `/register`, `/mcq`, and the three auth APIs)
+- Manual happy path and duplicate/invalid-credential paths match the acceptance criteria — **met** (no product-code changes)
+
+**What was verified (2026-09-02) against** `https://quiz-maker-2026.quiz-maker-jaya.workers.dev`:
+
+| Check | Result |
+| --- | --- |
+| `POST /api/auth/register` new user `p5103137` | **201** public profile (no `passwordHash`) |
+| Login by username `p5103137` | **200** |
+| Login by email `p5103137@school.edu` | **200** |
+| `POST /api/auth/logout` | **200** `{ "ok": true }` |
+| Duplicate username | **409** `{ "error": "Username is already taken" }` |
+| Duplicate email | **409** `{ "error": "Email is already taken" }` |
+| Wrong password | **401** `{ "error": "Invalid username/email or password" }` |
+| Unknown identifier | **401** same generic message (does not leak which field failed) |
+
+**D1 hashes (no plaintext):**
+
+- Remote `users`: 3 rows; all `length(password_hash) = 64`; none equal `first_name` / `last_name` / `username` / `email`
+- Local `users`: 1 row (`test` / `test@test.com`); `hash_len` 64, lowercase hex
+
+Studio URL is the **remote** database. `npm run dev` writes **local** D1. No product files were changed in this phase.
 
 **Deliverables:**
 
-- Lint, build, and test results reported
+- Lint, build, and test results reported (this section)
 - Manual flow verified against D1 where the runtime allows it
 
 ---
@@ -623,13 +643,14 @@ Branch: `feature/user-authentication` (tracks `origin/feature/user-authenticatio
 | `d39dfe5` | 1 | User table migration + Vitest harness |
 | `54b70b3` | 2 | SHA-256 + User Service |
 | `08a8570` | 3 | Register/login/logout APIs + Zod |
-| *(uncommitted until asked)* | 4 + PRD | shadcn login/register/MCQ UI, `user-event`, PRD updates |
+| `6a69b61` | 4 | shadcn login/register/MCQ UI, `user-event`, PRD UI/TDD record |
+| *(this commit)* | 5 | Verification results: suite, lint, build, D1 hashes, username+email login |
 
 **TDD:** Each of Phases 1–4 wrote colocated tests first (red), then product code until green. See Testing.
 
-**Automated suite after Phase 4:** `npm test` → **36 passed** (9 files). `npm run lint` → 0 errors; 1 existing unused `_request` warning in `src/app/api/auth/logout/handler.ts:3`. `npm run build` → succeeded; routes `/`, `/login`, `/register`, `/mcq`, and the three auth APIs.
+**Automated suite after Phase 5:** `npm test` → **36 passed** (9 files). `npm run lint` → 0 errors; 1 unused `_request` warning in `src/app/api/auth/logout/handler.ts:3`. `npm run build` → succeeded; routes `/`, `/login`, `/register`, `/mcq`, and the three auth APIs.
 
-**Manual verification (Phase 4 review, 2026-09-02):** The product owner confirmed register, login, and logout work in the running app.
+**Manual verification (Phase 4 review + Phase 5, 2026-09-02):** Product owner confirmed register, login, and logout in the UI. Phase 5 additionally confirmed login by username and by email, 409 duplicates, generic 401, and 64-character hex hashes in D1.
 
 **Dependencies added for this feature (proposed at phase start, then installed):**
 
@@ -718,16 +739,16 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 
 ## Acceptance Criteria
 
-- [ ] A D1 `users` table exists locally with id, first name, last name, username, email, and password hash
+- [x] A D1 `users` table exists locally with id, first name, last name, username, email, and password hash
 - [x] Registration requires both username and email; username may be an email address; email must be a valid email format
 - [x] Username is unique; a second registration with the same username is rejected with 409
 - [x] Email is unique; a second registration with the same email is rejected with 409
-- [ ] Passwords are never stored in plaintext; D1 contains only hashes
+- [x] Passwords are never stored in plaintext; D1 contains only hashes
 - [x] The register and login UIs hash the password before the HTTP request is sent
 - [x] Registration uses the User Service to insert a user and returns 201 with a public profile (no `passwordHash`) that includes username and email
 - [x] The login page has exactly two fields: username or email, then password
-- [ ] Login with the registered username and correct password returns 200 and redirects to `/mcq`
-- [ ] Login with the registered email and correct password returns 200 and redirects to `/mcq`
+- [x] Login with the registered username and correct password returns 200 and redirects to `/mcq`
+- [x] Login with the registered email and correct password returns 200 and redirects to `/mcq`
 - [x] Login with a wrong password or unknown identifier returns 401 with `{ "error": "Invalid username/email or password" }`
 - [x] User Service supports create, update, retrieve (by id, by username, by email, and by login identifier), and delete
 - [x] Successful registration redirects to `/mcq` — unit tests and **manual verification 2026-09-02**
@@ -737,8 +758,8 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 - [x] No JWT, cookies, social login, or session store is introduced
 - [x] Vitest is installed and `npm test` runs the colocated `*.test.ts` / `*.test.tsx` files
 - [x] Phase 1 schema tests were written first (red: no SQL files), then turned green against `migrations/0001_create_users_table.sql`
-- [x] Each implementation phase wrote tests first (red), then turned them green; the suite covers happy paths and failure paths — Phases 1–4 met; Phase 5 remaining
-- [ ] `npm test`, `npm run lint`, and `npm run build` succeed; results are reported, not assumed — Phase 4 recorded 36 passed / lint 0 errors / build ok; Phase 5 re-runs as the official gate
+- [x] Each implementation phase wrote tests first (red), then turned them green; the suite covers happy paths and failure paths — Phases 1–5 met
+- [x] `npm test`, `npm run lint`, and `npm run build` succeed; results are reported, not assumed — Phase 5 (2026-09-02): 36 passed / lint 0 errors 1 warning / build ok
 
 ---
 
@@ -926,6 +947,6 @@ When working with this PRD:
 ## Current Status
 
 **Last Updated**: 2026-09-02
-**Current Phase**: Phase 4 - Auth UI and MCQ Stub
-**Status**: COMPLETED (verified: register, login, and logout work in the running app)
-**Next Steps**: Phase 5 — re-run `npm test`, `npm run lint`, and `npm run build`; confirm D1 stores only hashes; optionally confirm login by username **and** by email. Commit Phase 4 when asked. Do not start Phase 5 implementation work until asked.
+**Current Phase**: Phase 5 - Verification
+**Status**: COMPLETED
+**Next Steps**: Auth foundation is complete. No further product-code work for this foundation unless a new gap is found.
