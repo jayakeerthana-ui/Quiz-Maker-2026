@@ -367,7 +367,7 @@ Every phase below starts with tests that are expected to fail. Implementation fo
 - Migration file under `migrations/`
 - Schema tests next to the migration or under `src/lib/`
 
-### Phase 2: User Service and Hashing - PLANNED
+### Phase 2: User Service and Hashing - COMPLETED
 
 **Objective**: User records can be created, read, updated, and deleted; passwords are hashed and never stored in plaintext.
 
@@ -398,8 +398,8 @@ Every phase below starts with tests that are expected to fail. Implementation fo
 
 **Done when:**
 
-- `npm test` is **green** for password and User Service tests
-- No unit test talks to a real D1 database
+- `npm test` is **green** for password and User Service tests — **met** (15 passed including Phase 1 schema tests, 2026-09-01)
+- No unit test talks to a real D1 database — **met** (`user-service.test.ts` mocks `@/lib/db`)
 
 **Deliverables:**
 
@@ -524,9 +524,10 @@ This phase does not add a new red suite. It runs the accumulated tests as the co
 - `vitest.config.ts` — Vitest config (`jsdom`, `globals`, `@/` via `vite-tsconfig-paths`)
 - `migrations/0001_create_users_table.sql` — User table and unique username/email indexes
 - `migrations/users.schema.test.ts` — asserts the migration SQL
-- `src/lib/password.ts` — SHA-256 helper for client and server
+- `src/lib/password.ts` — SHA-256 helper for client and server (`sha256Hex` at `src/lib/password.ts:1`)
 - `src/lib/password.test.ts` — hashing unit tests
-- `src/lib/services/user-service.ts` — User CRUD; only module that talks to D1 for users
+- `src/lib/db.ts` — `getDb()` via `getCloudflareContext()` (`src/lib/db.ts:3`)
+- `src/lib/services/user-service.ts` — User CRUD; only module that talks to D1 for users (`UserConflictError` at `src/lib/services/user-service.ts:5`; `toPublicUser` at `src/lib/services/user-service.ts:75`; `getUserByLoginIdentifier` at `src/lib/services/user-service.ts:171`)
 - `src/lib/services/user-service.test.ts` — User Service unit tests (mocked D1)
 - `src/app/api/auth/register/route.ts` — registration endpoint
 - `src/app/api/auth/register/route.test.ts` — register API tests
@@ -580,8 +581,7 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 - Do not deploy. Do not apply D1 migrations with `--remote`.
 - Do not hand-edit `cloudflare-env.d.ts`, `next-env.d.ts`, or `package-lock.json`.
 - Logout does not establish or destroy a session. The MCQ page is not a protected resource in this phase.
-- Username uniqueness is case-sensitive unless implementation normalizes to a consistent case before insert and lookup. Prefer storing and comparing a trimmed username; document the chosen rule in this section when implemented.
-- Email is always stored trimmed and lowercased so `Ada@School.edu` and `ada@school.edu` collide as duplicates. Login email lookup must apply the same normalization.
+- Username uniqueness is case-sensitive. Usernames are stored **trimmed** and compared as stored (SQLite UNIQUE on TEXT is case-sensitive). Email is always stored trimmed and lowercased so `Ada@School.edu` and `ada@school.edu` collide as duplicates. Login email lookup must apply the same normalization.
 - Login has no email field of its own. `getUserByLoginIdentifier` resolves one string against `username` or `email`.
 - Because username may itself be an email, registration must refuse a username that equals another user's email and an email that equals another user's username. Otherwise one identifier could match two accounts.
 - `@vitejs/plugin-react` is pinned to **v5** (`^5.2.0`). v6 pulled a Babel 8 peer that conflicts with this repo.
@@ -606,7 +606,7 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 - [ ] Login with the registered username and correct password returns 200 and redirects to `/mcq`
 - [ ] Login with the registered email and correct password returns 200 and redirects to `/mcq`
 - [ ] Login with a wrong password or unknown identifier returns 401 with `{ "error": "Invalid username/email or password" }`
-- [ ] User Service supports create, update, retrieve (by id, by username, by email, and by login identifier), and delete
+- [x] User Service supports create, update, retrieve (by id, by username, by email, and by login identifier), and delete
 - [ ] Successful registration redirects to `/mcq`
 - [ ] Successful login redirects to `/mcq`
 - [ ] `/mcq` is a stub (no MCQ CRUD) and offers logout
@@ -614,7 +614,7 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 - [ ] No JWT, cookies, social login, or session store is introduced
 - [x] Vitest is installed and `npm test` runs the colocated `*.test.ts` / `*.test.tsx` files
 - [x] Phase 1 schema tests were written first (red: no SQL files), then turned green against `migrations/0001_create_users_table.sql`
-- [ ] Each implementation phase wrote tests first (red), then turned them green; the suite covers happy paths and failure paths
+- [ ] Each implementation phase wrote tests first (red), then turned them green; the suite covers happy paths and failure paths — Phase 1 and Phase 2 met; Phases 3–4 remaining
 - [ ] `npm test`, `npm run lint`, and `npm run build` succeed; results are reported, not assumed
 
 ---
@@ -788,6 +788,6 @@ When working with this PRD:
 ## Current Status
 
 **Last Updated**: 2026-09-01
-**Current Phase**: Phase 1 - Database Foundation
+**Current Phase**: Phase 2 - User Service and Hashing
 **Status**: COMPLETED (awaiting review)
-**Next Steps**: Review Phase 1. After approval, start Phase 2 (User Service and hashing) with tests first. Re-run `wrangler d1 migrations apply quiz-maker --local` once workerd runs on this machine.
+**Next Steps**: Review Phase 2. After approval, start Phase 3 (Authentication APIs) with tests first. Propose Zod before adding it.
