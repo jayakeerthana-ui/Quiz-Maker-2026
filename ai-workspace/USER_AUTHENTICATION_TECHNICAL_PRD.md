@@ -407,7 +407,7 @@ Every phase below starts with tests that are expected to fail. Implementation fo
 - `src/lib/services/user-service.ts` + `src/lib/services/user-service.test.ts`
 - No plaintext password in persistence paths
 
-### Phase 3: Authentication APIs - PLANNED
+### Phase 3: Authentication APIs - COMPLETED
 
 **Objective**: Register, login, and logout HTTP endpoints consume the User Service.
 
@@ -439,8 +439,8 @@ Every phase below starts with tests that are expected to fail. Implementation fo
 
 **Done when:**
 
-- `npm test` is **green** for the three route suites
-- Failure-path tests exist (not only 201/200)
+- `npm test` is **green** for the three route suites — **met** (26 passed including Phase 1–2, 2026-09-02)
+- Failure-path tests exist (not only 201/200) — **met** (400, 409, 401)
 
 **Deliverables:**
 
@@ -524,16 +524,17 @@ This phase does not add a new red suite. It runs the accumulated tests as the co
 - `vitest.config.ts` — Vitest config (`jsdom`, `globals`, `@/` via `vite-tsconfig-paths`)
 - `migrations/0001_create_users_table.sql` — User table and unique username/email indexes
 - `migrations/users.schema.test.ts` — asserts the migration SQL
-- `src/lib/password.ts` — SHA-256 helper for client and server (`sha256Hex` at `src/lib/password.ts:1`)
+- `src/lib/password.ts` — SHA-256 helper for client and server (`sha256Hex` at `src/lib/password.ts:1`; `timingSafeEqual` at `src/lib/password.ts:9`)
 - `src/lib/password.test.ts` — hashing unit tests
 - `src/lib/db.ts` — `getDb()` via `getCloudflareContext()` (`src/lib/db.ts:3`)
 - `src/lib/services/user-service.ts` — User CRUD; only module that talks to D1 for users (`UserConflictError` at `src/lib/services/user-service.ts:5`; `toPublicUser` at `src/lib/services/user-service.ts:75`; `getUserByLoginIdentifier` at `src/lib/services/user-service.ts:171`)
 - `src/lib/services/user-service.test.ts` — User Service unit tests (mocked D1)
-- `src/app/api/auth/register/route.ts` — registration endpoint
+- `src/lib/auth-schemas.ts` — Zod schemas for register and login bodies (`src/lib/auth-schemas.ts:3`)
+- `src/app/api/auth/register/route.ts` — registration endpoint (`src/app/api/auth/register/route.ts:6`)
 - `src/app/api/auth/register/route.test.ts` — register API tests
-- `src/app/api/auth/login/route.ts` — login endpoint
+- `src/app/api/auth/login/route.ts` — login endpoint (`src/app/api/auth/login/route.ts:8`)
 - `src/app/api/auth/login/route.test.ts` — login API tests
-- `src/app/api/auth/logout/route.ts` — logout acknowledgement
+- `src/app/api/auth/logout/route.ts` — logout acknowledgement (`src/app/api/auth/logout/route.ts:3`)
 - `src/app/api/auth/logout/route.test.ts` — logout API tests
 - `src/app/login/page.tsx` — login page
 - `src/app/register/page.tsx` — registration page
@@ -597,15 +598,15 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 
 - [ ] A D1 `users` table exists locally with id, first name, last name, username, email, and password hash
 - [ ] Registration requires both username and email; username may be an email address; email must be a valid email format
-- [ ] Username is unique; a second registration with the same username is rejected with 409
-- [ ] Email is unique; a second registration with the same email is rejected with 409
+- [x] Username is unique; a second registration with the same username is rejected with 409
+- [x] Email is unique; a second registration with the same email is rejected with 409
 - [ ] Passwords are never stored in plaintext; D1 contains only hashes
 - [ ] The register and login UIs hash the password before the HTTP request is sent
-- [ ] Registration uses the User Service to insert a user and returns 201 with a public profile (no `passwordHash`) that includes username and email
+- [x] Registration uses the User Service to insert a user and returns 201 with a public profile (no `passwordHash`) that includes username and email
 - [ ] The login page has exactly two fields: username or email, then password
 - [ ] Login with the registered username and correct password returns 200 and redirects to `/mcq`
 - [ ] Login with the registered email and correct password returns 200 and redirects to `/mcq`
-- [ ] Login with a wrong password or unknown identifier returns 401 with `{ "error": "Invalid username/email or password" }`
+- [x] Login with a wrong password or unknown identifier returns 401 with `{ "error": "Invalid username/email or password" }`
 - [x] User Service supports create, update, retrieve (by id, by username, by email, and by login identifier), and delete
 - [ ] Successful registration redirects to `/mcq`
 - [ ] Successful login redirects to `/mcq`
@@ -614,7 +615,7 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 - [ ] No JWT, cookies, social login, or session store is introduced
 - [x] Vitest is installed and `npm test` runs the colocated `*.test.ts` / `*.test.tsx` files
 - [x] Phase 1 schema tests were written first (red: no SQL files), then turned green against `migrations/0001_create_users_table.sql`
-- [ ] Each implementation phase wrote tests first (red), then turned them green; the suite covers happy paths and failure paths — Phase 1 and Phase 2 met; Phases 3–4 remaining
+- [ ] Each implementation phase wrote tests first (red), then turned them green; the suite covers happy paths and failure paths — Phases 1–3 met; Phase 4 remaining
 - [ ] `npm test`, `npm run lint`, and `npm run build` succeed; results are reported, not assumed
 
 ---
@@ -653,7 +654,7 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 
 - `@opennextjs/cloudflare` `getCloudflareContext()` — access `env.DB`
 - Existing shadcn/ui components — register/login/MCQ UI
-- Proposed: `zod` — validate API and form payloads (not installed; add only as part of this feature)
+- `zod` (^4.5.4) — validate register and login JSON bodies in route handlers
 - Proposed (Phase 1): `vitest`, `@vitejs/plugin-react`, `@testing-library/react`, `jsdom`, `vite-tsconfig-paths` — unit test harness per `.cursor/skills/testing/SKILL.md`
 - Proposed (Phase 4): `@testing-library/user-event` — realistic UI interaction in component tests
 
@@ -787,7 +788,7 @@ When working with this PRD:
 
 ## Current Status
 
-**Last Updated**: 2026-09-01
-**Current Phase**: Phase 2 - User Service and Hashing
+**Last Updated**: 2026-09-02
+**Current Phase**: Phase 3 - Authentication APIs
 **Status**: COMPLETED (awaiting review)
-**Next Steps**: Review Phase 2. After approval, start Phase 3 (Authentication APIs) with tests first. Propose Zod before adding it.
+**Next Steps**: Review Phase 3. After approval, start Phase 4 (Auth UI and MCQ stub) with tests first. Propose `@testing-library/user-event` before adding it.
