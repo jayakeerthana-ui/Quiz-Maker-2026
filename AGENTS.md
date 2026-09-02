@@ -11,9 +11,10 @@ the problem, the primary user, and the current state. Two or three sentences.
 Keep it current. An out-of-date description here misleads every future conversation.
 -->
 
-This is an unmodified AISprints starter. No application features have been built yet.
-The technical PRD in `ai-workspace/` is the source of truth for what is being built and
-for the current phase of work.
+Quiz Maker is a greenfield app for teachers who will share a bank of multiple-choice
+questions. User authentication (D1 users, hashed register/login APIs, and shadcn
+login/register/MCQ stub UI) is on `feature/user-authentication`. The technical PRD in
+`ai-workspace/` is the source of truth for what is being built and the current phase.
 
 ## Stack
 
@@ -24,8 +25,8 @@ for the current phase of work.
 - **TypeScript** in strict mode
 - **Wrangler** for Cloudflare configuration, secrets, and deployment
 
-No database, authentication, testing framework, or AI SDK is installed yet. Do not
-write code that imports one without adding it first and telling the user.
+D1 (`DB`), Vitest, Zod, and SHA-256 auth are in use. There is no AI SDK and no
+JWT/cookie/OAuth session. Do not add a dependency without asking first.
 
 ## Layout
 
