@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { McqPreview } from "@/components/mcq-preview";
 
@@ -37,7 +38,7 @@ describe("McqPreview", () => {
 		vi.stubGlobal("fetch", vi.fn());
 	});
 
-	it("shows the name, question stem, choices, and the correct badge", async () => {
+	it("shows the name, question stem, and choices without revealing the correct answer", async () => {
 		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { mcq: loadedMcq }) as Response);
 
 		render(<McqPreview mcqId="q1" />);
@@ -46,10 +47,51 @@ describe("McqPreview", () => {
 			expect(screen.getByRole("heading", { name: "Photosynthesis" })).toBeTruthy();
 		});
 		expect(screen.getByText("What gas do plants produce?")).toBeTruthy();
-		expect(screen.getByText("Oxygen")).toBeTruthy();
-		expect(screen.getByText("Nitrogen")).toBeTruthy();
-		expect(screen.getByText(/^correct$/i)).toBeTruthy();
+		expect(screen.getByRole("radio", { name: /oxygen/i })).toBeTruthy();
+		expect(screen.getByRole("radio", { name: /nitrogen/i })).toBeTruthy();
+		expect(screen.queryByText(/^correct$/i)).toBeNull();
 		expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
 		expect(fetch).toHaveBeenCalledWith("/api/mcqs/q1");
+	});
+
+	it("asks to select an answer before checking", async () => {
+		const user = userEvent.setup();
+		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { mcq: loadedMcq }) as Response);
+
+		render(<McqPreview mcqId="q1" />);
+		await waitFor(() => screen.getByRole("button", { name: /check answer/i }));
+		await user.click(screen.getByRole("button", { name: /check answer/i }));
+
+		expect(screen.getByRole("alert").textContent).toMatch(/select an answer/i);
+		expect(screen.queryByText(/^correct$/i)).toBeNull();
+	});
+
+	it("marks a correct selection as Correct after Check answer", async () => {
+		const user = userEvent.setup();
+		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { mcq: loadedMcq }) as Response);
+
+		render(<McqPreview mcqId="q1" />);
+		await waitFor(() => screen.getByRole("radio", { name: /oxygen/i }));
+		await user.click(screen.getByRole("radio", { name: /oxygen/i }));
+		await user.click(screen.getByRole("button", { name: /check answer/i }));
+
+		expect(screen.getByRole("alert").textContent).toMatch(/^correct$/i);
+		expect(fetch).not.toHaveBeenCalledWith(
+			expect.stringContaining("/api/mcq-attempts"),
+			expect.anything(),
+		);
+	});
+
+	it("marks a wrong selection as Incorrect and then shows the correct choice", async () => {
+		const user = userEvent.setup();
+		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { mcq: loadedMcq }) as Response);
+
+		render(<McqPreview mcqId="q1" />);
+		await waitFor(() => screen.getByRole("radio", { name: /nitrogen/i }));
+		await user.click(screen.getByRole("radio", { name: /nitrogen/i }));
+		await user.click(screen.getByRole("button", { name: /check answer/i }));
+
+		expect(screen.getByRole("alert").textContent).toMatch(/^incorrect$/i);
+		expect(screen.getByText(/^correct$/i)).toBeTruthy();
 	});
 });

@@ -11,10 +11,13 @@ the problem, the primary user, and the current state. Two or three sentences.
 Keep it current. An out-of-date description here misleads every future conversation.
 -->
 
-Quiz Maker is a greenfield app for teachers who will share a bank of multiple-choice
+Quiz Maker is a greenfield app for teachers who share a bank of multiple-choice
 questions. User authentication (D1 users, hashed register/login APIs, and shadcn
-login/register/MCQ stub UI) is on `feature/user-authentication`. The technical PRD in
-`ai-workspace/` is the source of truth for what is being built and the current phase.
+login/register UI) and MCQ CRUD (three D1 tables, MCQ Service, HTTP APIs, and
+list/create/edit/preview) are on `feature/mcq-crud`. Preview grades a selected
+choice after Check answer and does not record an attempt. There is still no
+session cookie; `/mcq` is reachable by URL. Technical PRDs in `ai-workspace/`
+are the source of truth for what is being built and the current phase.
 
 ## Stack
 
