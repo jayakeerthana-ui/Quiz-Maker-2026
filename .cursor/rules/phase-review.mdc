@@ -1,0 +1,29 @@
+---
+description: Stop after each PRD phase for review; commit and push only after approval
+alwaysApply: true
+---
+
+# Phased delivery and review
+
+Technical PRDs in `ai-workspace/` break work into numbered phases. Treat each phase as a hard stop.
+
+## After a phase is done
+
+1. Finish only that phase (tests first, then implementation, then the phase gates in `AGENTS.md`).
+2. Update the PRD phase status (`PLANNED` → `IN PROGRESS` → `COMPLETED`) and current status.
+3. **Stop.** Summarize what shipped and wait. Do not start the next phase, open a PR, or deploy unless asked.
+
+## After review and approval
+
+When the user says the phase looks good and asks to commit (or commit and push):
+
+1. Commit on the **current feature branch**. Do not switch to `main` or invent a new branch.
+2. Include only the files for that phase. Leave local editor config, secrets, and generated files out.
+3. Push to the matching remote branch (`git push -u origin HEAD`) only if they asked to push.
+4. Then wait again. Do not start the next phase until they explicitly say to continue.
+
+## Do not
+
+- Chain Phase N+1 onto an unreviewed Phase N
+- Commit or push because a phase is green; wait for approval
+- Force-push or amend a commit that is already on the remote

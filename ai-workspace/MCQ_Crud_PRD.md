@@ -7,7 +7,7 @@ Date last modified: 2026-09-02
 
 Quiz Maker’s authentication foundation lands teachers on a placeholder MCQ Management page (`/mcq`) that states question CRUD is not available yet. Teachers still have no way to create, inspect, edit, or remove multiple-choice questions, and there is no D1 schema for questions, answer choices, or recorded attempts. This feature replaces that stub with a shared test-bank workspace: a table of questions (short name plus the question stem), a dedicated create/edit page, a preview, deletion, attribution of each MCQ to the creating user, and the service/API layers needed to persist questions, choices, and attempts.
 
-**As of 2026-09-02:** Phases 1–2 are complete on `feature/mcq-crud`. Schema SQL and MCQ Service exist; APIs and UI are not started. Wait for review before Phase 3.
+**As of 2026-09-02:** Phases 1–3 are complete on `feature/mcq-crud`. Schema, MCQ Service, and HTTP APIs exist; UI still uses the stub. Wait for review before Phase 4.
 
 ---
 
@@ -645,7 +645,7 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 - `src/lib/services/mcq-service.ts`
 - `src/lib/services/mcq-service.test.ts`
 
-### Phase 3: MCQ and Attempt APIs - PLANNED
+### Phase 3: MCQ and Attempt APIs - COMPLETED
 
 **Objective**: HTTP endpoints consume the MCQ Service with the status codes in this PRD.
 
@@ -682,8 +682,17 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 
 **Done when:**
 
-- `npm test` is **green** for the new route suites
-- Failure-path tests exist (not only 201/200)
+- `npm test` is **green** for the new route suites — **met** (72 passed, 15 files, 2026-09-02). First run was **red** (missing `./handler`).
+- Failure-path tests exist (not only 201/200) — **met** (400, 404, 409)
+
+**What shipped:**
+
+- `src/lib/mcq-schemas.ts:40` — `createMcqBodySchema`; `updateMcqBodySchema` at `:47`; `createAttemptBodySchema` at `:53`
+- `src/app/api/mcqs/handler.ts:11` — `GET` list; `POST` at `:20` (201 via `createMcq`; 400 Zod; 404 `McqNotFoundError`)
+- `src/app/api/mcqs/[id]/handler.ts:17` — `GET`; `PUT` at `:30` (strips `createdByUserId`); `DELETE` at `:61`
+- `src/app/api/mcq-attempts/handler.ts:12` — `GET` list (exactly one filter); `POST` at `:36` (does not pass client `isCorrect`)
+- `src/app/api/mcq-attempts/[id]/handler.ts:8` — `GET` one attempt
+- Thin `route.ts` re-exports; colocated `route.test.ts` files mock the MCQ Service, not D1
 
 **Deliverables:**
 
@@ -766,11 +775,11 @@ Fill line references as code is written. Until then, paths are the contract.
 - `src/lib/db.ts` — existing `getDb()`; reuse, do not duplicate
 - `src/lib/services/mcq-service.ts` — only module that talks to D1 for MCQ/choices/attempts (`McqNotFoundError` at `:5`; `createMcq` at `:236`; `updateMcq` at `:276`; `createAttempt` at `:366`)
 - `src/lib/services/mcq-service.test.ts:27` — mocks `@/lib/db`; suite at `:275`
-- `src/lib/mcq-schemas.ts` — Zod for MCQ and attempt bodies
-- `src/app/api/mcqs/handler.ts` / `route.ts` — list + create
-- `src/app/api/mcqs/[id]/handler.ts` / `route.ts` — get + update + delete
-- `src/app/api/mcq-attempts/handler.ts` / `route.ts` — list + record
-- `src/app/api/mcq-attempts/[id]/handler.ts` / `route.ts` — get one
+- `src/lib/mcq-schemas.ts:40` — `createMcqBodySchema`; `updateMcqBodySchema` at `:47`; `createAttemptBodySchema` at `:53`
+- `src/app/api/mcqs/handler.ts:11` — list `GET`; `POST` at `:20`; `src/app/api/mcqs/route.ts:1` re-export
+- `src/app/api/mcqs/[id]/handler.ts:17` — `GET` / `PUT` / `DELETE`
+- `src/app/api/mcq-attempts/handler.ts:12` — list `GET` / record `POST`
+- `src/app/api/mcq-attempts/[id]/handler.ts:8` — get one attempt
 - `src/app/mcq/page.tsx` — list page (replaces stub)
 - `src/app/mcq/new/page.tsx` — create page
 - `src/app/mcq/[id]/edit/page.tsx` — edit page
@@ -841,17 +850,17 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 ## Acceptance Criteria
 
 - [x] `mcqs`, `mcq_choices`, and `mcq_attempts` exist in the local D1 migration with the columns and foreign keys in this PRD (`mcqs` has `question` and `created_by_user_id`, and no `description`) — verified by `migrations/mcq.schema.test.ts` against the SQL files. This machine’s already-applied local D1 still has a stale `description` schema until local state is reset (see Phase 1).
-- [x] A question cannot be saved with fewer than 2 or more than 6 choices — MCQ Service tests, 2026-09-02 (APIs not wired yet)
-- [x] A question cannot be saved unless exactly one choice is marked correct — MCQ Service tests, 2026-09-02 (APIs not wired yet)
-- [ ] `GET /api/mcqs` returns questions for the table (id, name, question, createdByUserId, timestamps)
-- [ ] `POST /api/mcqs` creates a question with name, question, createdByUserId, and choices, and returns 201
-- [ ] `POST /api/mcqs` returns 404 when `createdByUserId` does not match a user
-- [ ] `PUT /api/mcqs/:id` updates name, question, and choices without changing `createdByUserId`, or 404 / 409 as specified
-- [ ] `GET /api/mcqs/:id` returns the question with choices ordered by position, or 404
-- [ ] `DELETE /api/mcqs/:id` removes the question (choices cascade), or 404
-- [ ] `POST /api/mcq-attempts` records an attempt and sets `isCorrect` from the stored choice, not the client
-- [ ] `GET /api/mcq-attempts` lists by exactly one of `mcqId` or `userId`
-- [ ] Route handlers do not run SQL; the MCQ Service is the only D1 access for this feature
+- [x] A question cannot be saved with fewer than 2 or more than 6 choices — MCQ Service and POST `/api/mcqs` tests, 2026-09-02
+- [x] A question cannot be saved unless exactly one choice is marked correct — MCQ Service and POST `/api/mcqs` tests, 2026-09-02
+- [x] `GET /api/mcqs` returns questions for the table (id, name, question, createdByUserId, timestamps)
+- [x] `POST /api/mcqs` creates a question with name, question, createdByUserId, and choices, and returns 201
+- [x] `POST /api/mcqs` returns 404 when `createdByUserId` does not match a user
+- [x] `PUT /api/mcqs/:id` updates name, question, and choices without changing `createdByUserId`, or 404 / 409 as specified
+- [x] `GET /api/mcqs/:id` returns the question with choices ordered by position, or 404
+- [x] `DELETE /api/mcqs/:id` removes the question (choices cascade), or 404
+- [x] `POST /api/mcq-attempts` records an attempt and sets `isCorrect` from the stored choice, not the client
+- [x] `GET /api/mcq-attempts` lists by exactly one of `mcqId` or `userId`
+- [x] Route handlers do not run SQL; the MCQ Service is the only D1 access for this feature
 - [ ] `/mcq` shows a table (Name, Question, Actions) and a **Create MCQ** button; stub copy is gone
 - [ ] **Create MCQ** navigates to a create page with Save and Cancel
 - [ ] Create/edit collect **Name** (short label) and **Question** (the prompt); there is no Description field
@@ -1008,7 +1017,7 @@ Populate with real incidents as they are fixed. Anticipated issues:
 
 When working with this PRD:
 
-1. **Stop after each phase unless the user has approved the next one.** Phase 2 is done; do not start Phase 3 until review.
+1. **Stop after each phase unless the user has approved the next one.** Phase 3 is done; do not start Phase 4 until review.
 2. Start by reading Overview and Hypothesis: shared teacher test-bank CRUD, not sessions, not AI, not a student quiz runner.
 3. Use Scope (In/Out/Cut) as a hard boundary. Do not add JWT, cookies, OAuth, a `description` column, attempt-taking UI, or extra question types. Do persist `question` and `created_by_user_id` as specified.
 4. Follow the **TDD** cycle in Testing for Phases 1–4: write the listed tests first, run `npm test` (expect red), then implement until green. Do not implement first and retrofit tests. Phase 5 runs the accumulated suite; if a gap is found, still red then green.
@@ -1030,6 +1039,6 @@ When working with this PRD:
 ## Current Status
 
 **Last Updated**: 2026-09-02
-**Current Phase**: Phase 2 - MCQ Service
+**Current Phase**: Phase 3 - MCQ and Attempt APIs
 **Status**: COMPLETED (awaiting review)
-**Next Steps**: Review Phase 2. After approval, begin Phase 3 (API handler tests first). Do not start Phase 3 before that approval.
+**Next Steps**: Review Phase 3. After approval, begin Phase 4 (UI tests first; propose shadcn `dropdown-menu` and `textarea` before adding them). Do not start Phase 4 before that approval.
