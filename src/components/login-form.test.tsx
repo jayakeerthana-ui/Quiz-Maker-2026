@@ -42,7 +42,9 @@ describe("LoginForm", () => {
 	it("hashes the password before fetch and navigates to /mcq on 200", async () => {
 		const user = userEvent.setup();
 		const plaintext = "secret123";
-		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { user: { username: "ada" } }) as Response);
+		vi.mocked(fetch).mockResolvedValue(
+			jsonResponse(200, { user: { id: "u1", username: "ada" } }) as Response,
+		);
 
 		render(<LoginForm />);
 		await user.type(screen.getByLabelText(/username or email/i), "ada");
@@ -61,7 +63,7 @@ describe("LoginForm", () => {
 		expect(body.identifier).toBe("ada");
 		expect(body.password).toBe(await sha256Hex(plaintext));
 		expect(body.password).not.toBe(plaintext);
-		expect(pushMock).toHaveBeenCalledWith("/mcq");
+		expect(pushMock).toHaveBeenCalledWith("/mcq?userId=u1");
 	});
 
 	it("shows the generic 401 message and does not navigate", async () => {

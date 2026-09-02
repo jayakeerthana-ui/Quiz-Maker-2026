@@ -1,5 +1,10 @@
-import { McqStub } from "@/components/mcq-stub";
+import { McqList } from "@/components/mcq-list";
 
-export default function McqPage() {
-	return <McqStub />;
+export default async function McqPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ userId?: string }>;
+}) {
+	const { userId } = await searchParams;
+	return <McqList createdByUserId={userId} />;
 }

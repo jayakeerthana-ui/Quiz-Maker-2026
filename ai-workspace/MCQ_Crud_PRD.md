@@ -5,9 +5,9 @@ Date last modified: 2026-09-02
 
 ## Overview/Problem
 
-Quiz Maker’s authentication foundation lands teachers on a placeholder MCQ Management page (`/mcq`) that states question CRUD is not available yet. Teachers still have no way to create, inspect, edit, or remove multiple-choice questions, and there is no D1 schema for questions, answer choices, or recorded attempts. This feature replaces that stub with a shared test-bank workspace: a table of questions (short name plus the question stem), a dedicated create/edit page, a preview, deletion, attribution of each MCQ to the creating user, and the service/API layers needed to persist questions, choices, and attempts.
+Quiz Maker’s authentication foundation used to land teachers on a placeholder MCQ Management page (`/mcq`) that stated question CRUD was not available yet. This feature replaces that stub with a shared test-bank workspace: a table of questions (short name plus the question stem), a dedicated create/edit page, a preview, deletion, attribution of each MCQ to the creating user, and the service/API layers needed to persist questions, choices, and attempts.
 
-**As of 2026-09-02:** Phases 1–3 are complete on `feature/mcq-crud`. Schema, MCQ Service, and HTTP APIs exist; UI still uses the stub. Wait for review before Phase 4.
+**As of 2026-09-02:** Phases 1–4 are **COMPLETED** on `feature/mcq-crud`. Schema, MCQ Service, HTTP APIs, and list/create/edit/preview UI are in the app. Post-review fixes: login/register pass `user.id` as `?userId=`; local D1 was reset so `mcqs.question` exists; Save/Cancel sit side by side. Phase 5 (full verification gate) is **not started**. `/mcq` is still reachable without a session — that is out of scope here; do not add cookies in this PRD.
 
 ---
 
@@ -51,7 +51,7 @@ This feature builds on `feature/user-authentication` (see `ai-workspace/USER_AUT
 
 ### Cut
 
-- **Server-side protection of MCQ routes and APIs** — there is still no session; `/mcq` remains reachable by URL, matching the auth foundation. Do not add JWT or cookies to “fix” this here.
+- **Server-side protection of MCQ routes and APIs** — there is still no session; `/mcq` remains reachable by URL, matching the auth foundation. Confirmed 2026-09-02: opening `http://localhost:3000/mcq` skips login. Do **not** add JWT or cookies in this sprint. A later session PRD (HttpOnly cookie + D1 session row + 401 on APIs) is the intended fix.
 - **Changing `created_by_user_id` on update** — the author is set at create and is immutable. PUT must not accept or alter it.
 - **Filtering the list by creator** — all teachers see all MCQs. Storing the author is not the same as scoping the bank.
 - **A teacher-facing “Created by” input** — create/edit collect **Name**, **Question**, and choices only. `createdByUserId` is a required create-API field, not a form field the teacher types.
@@ -70,7 +70,7 @@ This feature builds on `feature/user-authentication` (see `ai-workspace/USER_AUT
 
 Cloudflare D1 remains bound as `DB` in `wrangler.jsonc` to database `quiz-maker` (`eea14e86-b327-4629-a4cc-ab6225e01d39`). Worker name is `quiz-maker-2026`. The User table stays in `migrations/0001_create_users_table.sql`.
 
-**Existing placeholder:** `migrations/0002_create_mcq_tables.sql` was created with Wrangler (header only, no `CREATE TABLE`). Phase 1 **must write the schema into this file**. Do not add `0003_*.sql` for the initial three tables. Apply migrations **locally only** (`--local`). Do not apply them remotely.
+**Existing placeholder:** `migrations/0002_create_mcq_tables.sql` was created with Wrangler (header only, no `CREATE TABLE`). Phase 1 **wrote the schema into this file**. Do not add `0003_*.sql` for the initial three tables. Apply migrations **locally only** (`--local`) unless the user explicitly asks otherwise. Production `0002` was applied 2026-09-02 on request (`quiz-maker`, `eea14e86-b327-4629-a4cc-ab6225e01d39`). Local D1 was reset the same day so `mcqs` has `question` and `created_by_user_id` (no `description`).
 
 SQL table names are lowercase snake_case, matching `users`. Product names map as: **MCQ** → `mcqs`, **MCQ_Choices** → `mcq_choices`, **MCQ_Attempts** → `mcq_attempts`.
 
@@ -493,18 +493,18 @@ Icons: Lucide `EllipsisVertical` (three vertical dots) for Actions. Do not use a
   1. **Name** (`name`, `Input`, required, 1–200) — short identifiable label. Helper: “A short name for this MCQ in the table.”
   2. **Question** (`question`, `Textarea`, required, 1–2000) — the prompt presented to the user. Helper: “This is the question text shown in preview.”
   3. **Choices** — start with **two** rows. Each row: choice body (`Input`, required) and a control to mark **this** row as the correct answer (radio or exclusive toggle; exactly one selected). Rows numbered from 1 to match `position`.
-- Do **not** show a Created-by field. The form receives `createdByUserId` as a Client Component prop (from the page). The create page may read optional search param `userId` (`/mcq/new?userId=…`) and pass it through. If that prop is missing, Save shows a form-level error and does not `POST`.
+- Do **not** show a Created-by field. The form receives `createdByUserId` as a Client Component prop (from the page). Login (`src/components/login-form.tsx:74`) and register (`src/components/signup-form.tsx:83`) redirect to `/mcq?userId=` via `mcqHomeHref` (`src/lib/mcq-paths.ts:1`). The list page reads that search param (`src/app/mcq/page.tsx:8`) and Create MCQ keeps it (`mcqNewHref` at `src/lib/mcq-paths.ts:8`). If the prop is missing, Save shows a form-level error and does not `POST`.
 - **Add choice** adds a row until 6; the control is disabled or hidden at 6. Helper text: “2 to 6 choices. Exactly one must be marked correct.”
 - **Remove** on a row is available only when there are more than 2 choices.
 - Default: first choice marked correct so the form is submittable without an extra click; the teacher can change it.
-- Actions: **Save** (submit) and **Cancel**. Cancel navigates to `/mcq` without `fetch`.
-- Save: `POST /api/mcqs` with `{ name, question, createdByUserId, choices: [{ body, isCorrect, position }] }`. On 201, `router.push("/mcq")`. Do not navigate on 400/404/500.
+- Actions: **Save** (submit) and **Cancel**, side by side (`src/components/mcq-form.tsx:348`, `orientation="horizontal"` and `gap-4` so Cancel is not full-width / clipped). Cancel navigates with `mcqHomeHref` (keeps `userId`) without `fetch`.
+- Save: `POST /api/mcqs` with `{ name, question, createdByUserId, choices: [{ body, isCorrect, position }] }`. On 201, `router.push(mcqHomeHref(createdByUserId))`. Do not navigate on 400/404/500.
 
 #### Edit MCQ (/mcq/[id]/edit)
 
 - Same form as create. Title: **Edit MCQ**.
 - Load `GET /api/mcqs/:id`. Unknown id: visible “Question not found” and a way back to `/mcq` (link or button). Do not show an empty form that would create a new row.
-- Save: `PUT /api/mcqs/:id` including choice `id`s that came from the server; new rows omit `id`. On 200, `router.push("/mcq")`. Surface 409 choice-in-use on the form.
+- Save: `PUT /api/mcqs/:id` including choice `id`s that came from the server; new rows omit `id`. On 200, `router.push(mcqHomeHref(createdByUserId))`. Surface 409 choice-in-use on the form.
 
 #### Preview (/mcq/[id]/preview)
 
@@ -559,14 +559,14 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 **Done when:**
 
 - `npm test` is **green** for the new schema tests and existing user schema tests — **met** (42 passed, 10 files, 2026-09-02; 6 new MCQ schema tests after red: 6 failed on header-only `0002`)
-- Local apply succeeds on a machine with working `workerd`, or the failure is the known Windows `write EOF` issue (then report it; do not apply `--remote`) — **partial**: `npx wrangler d1 migrations apply quiz-maker --local` reported **No migrations to apply**. Local D1 already had `mcqs` / `mcq_choices` / `mcq_attempts` from an earlier apply of `0002`, but `PRAGMA table_info(mcqs)` still shows `description` and **no** `question` / `created_by_user_id`. Wrangler will not re-run `0002`. No `0003` was added. Remote was not touched. See Troubleshooting.
+- Local apply succeeds on a machine with working `workerd`, or the failure is the known Windows `write EOF` issue (then report it; do not apply `--remote`) — **met after repair (2026-09-02)**. First apply reported **No migrations to apply** (stale `description` schema). Local `.wrangler/state/v3/d1` was reset and `0001` + filled `0002` re-applied. `PRAGMA table_info(mcqs)` now has `question` and `created_by_user_id`. Remote `0002` was applied the same day on request. No `0003` was added.
 
 **What shipped:**
 
 - `migrations/0002_create_mcq_tables.sql:3` — `mcqs` (`question`, `created_by_user_id`); `mcq_choices` at `:15`; `mcq_attempts` at `:29`; indexes at `:13`, `:26`–`:27`, `:41`–`:42`
 - `migrations/mcq.schema.test.ts:55` — six SQL assertions (tables, columns, no `description` / no attempt `updated_at`, FKs, indexes)
 
-**Local D1 repair (after review, local only):** delete the local Wrangler D1 directory (`.wrangler/state/v3/d1`) and re-run `npx wrangler d1 migrations apply quiz-maker --local` so `0001` and the filled `0002` apply together. Do not apply `--remote`. Do not add `0003` for this schema.
+**Local D1 repair (done 2026-09-02, local only):** deleted `.wrangler/state/v3/d1` (stop `npm run dev` first if files are locked) and ran `npx wrangler d1 migrations apply quiz-maker --local`. Local users were wiped; register again after a reset. Do not add `0003` for this schema.
 
 **Deliverables:**
 
@@ -699,7 +699,7 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 - `src/lib/mcq-schemas.ts`
 - Route handlers and colocated `route.test.ts` files
 
-### Phase 4: MCQ UI - PLANNED
+### Phase 4: MCQ UI - COMPLETED
 
 **Objective**: Teachers can list, create, edit, preview, and delete questions from the app, and still log out.
 
@@ -724,8 +724,25 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 
 **Done when:**
 
-- `npm test` is **green** for the UI suites, including logout
-- Stub copy (“Question CRUD is not available yet”) is gone from `/mcq`
+- `npm test` is **green** for the UI suites, including logout — **met** (89 passed, 17 files, 2026-09-02). First run was **red** (missing `mcq-list` / `mcq-form` / `mcq-preview`).
+- Stub copy (“Question CRUD is not available yet”) is gone from `/mcq` — **met** (`McqStub` removed; list page owns logout)
+
+**What shipped:**
+
+- `src/components/ui/dropdown-menu.tsx:9` — shadcn Base UI menu; `src/components/ui/textarea.tsx:5` — question stem (no new npm packages)
+- `src/lib/mcq-paths.ts:1` — `mcqHomeHref` / `mcqNewHref` / `mcqEditHref` / `mcqPreviewHref` keep `?userId=`
+- `src/components/login-form.tsx:74` and `src/components/signup-form.tsx:83` — redirect to `/mcq?userId=` from `user.id`
+- `src/components/mcq-list.tsx:51` — table, Create MCQ (`:137` uses `mcqNewHref`); Actions menu; delete dialog at `:109`; logout at `:97`
+- `src/components/mcq-form.tsx:57` — shared create/edit; Save at `:162`; Save/Cancel row at `:348` (`orientation="horizontal"`, `gap-4`); no Created-by field
+- `src/components/mcq-preview.tsx:16` — read-only name, stem, choices, Correct badge; no Save / no attempt POST
+- `src/app/mcq/page.tsx:3` — list (`userId` at `:8`); `src/app/mcq/new/page.tsx:3` — create; edit at `src/app/mcq/[id]/edit/page.tsx:3`; preview at `src/app/mcq/[id]/preview/page.tsx:3`
+- Tests: `src/components/mcq-list.test.tsx`, `mcq-form.test.tsx`, `mcq-preview.test.tsx`; `mcq-stub.test.tsx` removed
+
+**Post-review (still Phase 4, 2026-09-02):**
+
+- Create Save required `createdByUserId` — fixed by threading `user.id` on the URL (not cookies)
+- Create then 500 “Unable to create question” — local D1 still had `description`; reset and re-applied `0001`+`0002`; teacher then saved an MCQ
+- Cancel hard to see next to Save — Field was `*:w-full`; now horizontal with `gap-4`
 
 **Deliverables:**
 
@@ -766,30 +783,33 @@ This phase does not add a new red suite. It runs the accumulated tests as the co
 
 ## Technical Implementation Details
 
-### Key Files (planned)
-
-Fill line references as code is written. Until then, paths are the contract.
+### Key Files
 
 - `migrations/0002_create_mcq_tables.sql:3` — `mcqs`; `mcq_choices` at `:15`; `mcq_attempts` at `:29`
 - `migrations/mcq.schema.test.ts:55` — schema tests (read SQL; no live D1)
-- `src/lib/db.ts` — existing `getDb()`; reuse, do not duplicate
+- `src/lib/db.ts:3` — existing `getDb()`; reuse, do not duplicate
 - `src/lib/services/mcq-service.ts` — only module that talks to D1 for MCQ/choices/attempts (`McqNotFoundError` at `:5`; `createMcq` at `:236`; `updateMcq` at `:276`; `createAttempt` at `:366`)
 - `src/lib/services/mcq-service.test.ts:27` — mocks `@/lib/db`; suite at `:275`
 - `src/lib/mcq-schemas.ts:40` — `createMcqBodySchema`; `updateMcqBodySchema` at `:47`; `createAttemptBodySchema` at `:53`
+- `src/lib/mcq-paths.ts:1` — `mcqHomeHref`; `mcqNewHref` at `:8`; `mcqEditHref` at `:15`; `mcqPreviewHref` at `:23`
 - `src/app/api/mcqs/handler.ts:11` — list `GET`; `POST` at `:20`; `src/app/api/mcqs/route.ts:1` re-export
 - `src/app/api/mcqs/[id]/handler.ts:17` — `GET` / `PUT` / `DELETE`
 - `src/app/api/mcq-attempts/handler.ts:12` — list `GET` / record `POST`
 - `src/app/api/mcq-attempts/[id]/handler.ts:8` — get one attempt
-- `src/app/mcq/page.tsx` — list page (replaces stub)
-- `src/app/mcq/new/page.tsx` — create page
-- `src/app/mcq/[id]/edit/page.tsx` — edit page
-- `src/app/mcq/[id]/preview/page.tsx` — preview page
-- `src/components/mcq-list.tsx` (or equivalent) — table, create button, logout, actions menu, delete dialog
-- `src/components/mcq-form.tsx` — shared create/edit form
-- `src/components/mcq-preview.tsx` — read-only preview
-- `src/components/mcq-stub.tsx` — **remove** in Phase 4
+- `src/app/mcq/page.tsx:3` — list page; `userId` search param at `:8`
+- `src/app/mcq/new/page.tsx:3` — create page
+- `src/app/mcq/[id]/edit/page.tsx:3` — edit page; `userId` at `:11`
+- `src/app/mcq/[id]/preview/page.tsx:3` — preview page
+- `src/components/mcq-list.tsx:51` — table, create button at `:137`, logout at `:97`, delete dialog at `:109`
+- `src/components/mcq-form.tsx:57` — shared create/edit form; Save at `:162`; Save/Cancel at `:348`
+- `src/components/mcq-preview.tsx:16` — read-only preview
+- `src/components/login-form.tsx:74` — post-login `/mcq?userId=`
+- `src/components/signup-form.tsx:83` — post-register `/mcq?userId=`
+- `src/components/mcq-stub.tsx` — **removed** in Phase 4
+- `src/components/ui/dropdown-menu.tsx:9` — Actions ellipsis
+- `src/components/ui/textarea.tsx:5` — question stem
 
-Auth files are unchanged except that `/mcq` no longer mounts `McqStub`.
+Auth landing still uses register/login/logout. Login and register now call `mcqHomeHref` so create can save. `/mcq` still has no session guard.
 
 ### Implementation Patterns
 
@@ -834,12 +854,12 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 
 - D1 is server-only. Never import the MCQ Service or `getCloudflareContext` into a `'use client'` file.
 - `npm run dev` runs on Node and will not exercise Workers/D1 the same way as production. Verify database-backed paths with `npm run preview` when possible.
-- Ask before adding dependencies. Zod and Vitest are already present. Phase 4 must propose shadcn `dropdown-menu` and `textarea` before running the CLI.
-- Do not deploy. Do not apply D1 migrations with `--remote`.
+- Ask before adding dependencies. Zod and Vitest are already present. Phase 4 added shadcn `dropdown-menu` and `textarea`; do not add more packages without asking.
+- Do not deploy. Do not apply D1 migrations with `--remote` unless the user explicitly asks. Production `0002` was applied 2026-09-02 on request.
 - Do not hand-edit `cloudflare-env.d.ts`, `next-env.d.ts`, or `package-lock.json`.
-- `/mcq` is still not a protected resource.
-- `createdByUserId` on create and `userId` on attempts are client-supplied until a session sprint exists. Do not store a fake session in `localStorage` to paper over that.
-- The create form does not include a Created-by input. `/mcq/new` may read optional search param `userId` and pass it as the `createdByUserId` prop so Phase 5 can create a row without adding cookies. Login/register redirects do not have to change.
+- `/mcq` is still not a protected resource. Visiting `/mcq` without logging in still shows the table. Do not add cookies, JWT, or `localStorage` in this PRD.
+- `createdByUserId` on create and `userId` on attempts are client-supplied until a session sprint exists. Login/register put `user.id` on the URL (`src/lib/mcq-paths.ts:1`). Do not store a fake session in `localStorage`.
+- The create form does not include a Created-by input.
 - There is no `description` column or JSON field. Use `question` for the stem and `name` for the short label.
 - Mixing anonymous `?` and numbered `?1` placeholders causes Wrangler binding errors. Use numbered placeholders only.
 - `@vitejs/plugin-react` stays on **v5**. Do not bump it.
@@ -849,7 +869,7 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 
 ## Acceptance Criteria
 
-- [x] `mcqs`, `mcq_choices`, and `mcq_attempts` exist in the local D1 migration with the columns and foreign keys in this PRD (`mcqs` has `question` and `created_by_user_id`, and no `description`) — verified by `migrations/mcq.schema.test.ts` against the SQL files. This machine’s already-applied local D1 still has a stale `description` schema until local state is reset (see Phase 1).
+- [x] `mcqs`, `mcq_choices`, and `mcq_attempts` exist in the local D1 migration with the columns and foreign keys in this PRD (`mcqs` has `question` and `created_by_user_id`, and no `description`) — SQL-file tests plus local D1 reset 2026-09-02 (`PRAGMA table_info(mcqs)`). Remote `0002` applied the same day on request.
 - [x] A question cannot be saved with fewer than 2 or more than 6 choices — MCQ Service and POST `/api/mcqs` tests, 2026-09-02
 - [x] A question cannot be saved unless exactly one choice is marked correct — MCQ Service and POST `/api/mcqs` tests, 2026-09-02
 - [x] `GET /api/mcqs` returns questions for the table (id, name, question, createdByUserId, timestamps)
@@ -861,20 +881,20 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 - [x] `POST /api/mcq-attempts` records an attempt and sets `isCorrect` from the stored choice, not the client
 - [x] `GET /api/mcq-attempts` lists by exactly one of `mcqId` or `userId`
 - [x] Route handlers do not run SQL; the MCQ Service is the only D1 access for this feature
-- [ ] `/mcq` shows a table (Name, Question, Actions) and a **Create MCQ** button; stub copy is gone
-- [ ] **Create MCQ** navigates to a create page with Save and Cancel
-- [ ] Create/edit collect **Name** (short label) and **Question** (the prompt); there is no Description field
-- [ ] Create form starts with two choices and can add up to six
-- [ ] Save on create persists the question and returns the teacher to `/mcq` with the new row visible
-- [ ] Cancel on create/edit returns to `/mcq` without saving
-- [ ] Actions menu (three vertical dots) offers Edit, Preview, and Delete
-- [ ] Edit loads the question into the same form and Save updates it
-- [ ] Preview shows the name, the question stem, and choices, and indicates the correct choice; it does not edit or record an attempt
-- [ ] Delete asks for confirmation, then removes the row
-- [ ] Log out from `/mcq` still calls `POST /api/auth/logout` and returns to `/login`
-- [ ] No JWT, cookies, social login, or session store is introduced
-- [ ] Each implementation phase wrote tests first (red), then turned them green; failure paths are covered
-- [ ] `npm test`, `npm run lint`, and `npm run build` succeed; results are reported, not assumed
+- [x] `/mcq` shows a table (Name, Question, Actions) and a **Create MCQ** button; stub copy is gone — UI tests, 2026-09-02
+- [x] **Create MCQ** navigates to a create page with Save and Cancel — UI tests, 2026-09-02; Cancel spacing fixed `mcq-form.tsx:348`
+- [x] Create/edit collect **Name** (short label) and **Question** (the prompt); there is no Description field — UI tests, 2026-09-02
+- [x] Create form starts with two choices and can add up to six — UI tests, 2026-09-02
+- [x] Save on create persists the question and returns the teacher to `/mcq` with the new row visible — unit tests plus teacher confirmation after local D1 reset, 2026-09-02. Phase 5 still re-runs the full flow as the closeout gate.
+- [x] Cancel on create/edit returns to `/mcq` without saving — UI tests, 2026-09-02 (keeps `?userId=` via `mcqHomeHref`)
+- [x] Actions menu (three vertical dots) offers Edit, Preview, and Delete — UI tests, 2026-09-02
+- [x] Edit loads the question into the same form and Save updates it — UI tests, 2026-09-02
+- [x] Preview shows the name, the question stem, and choices, and indicates the correct choice; it does not edit or record an attempt — UI tests, 2026-09-02
+- [x] Delete asks for confirmation, then removes the row — UI tests, 2026-09-02
+- [x] Log out from `/mcq` still calls `POST /api/auth/logout` and returns to `/login` — UI tests, 2026-09-02
+- [x] No JWT, cookies, social login, or session store is introduced — `/mcq` remains unguarded by design
+- [x] Each implementation phase wrote tests first (red), then turned them green; failure paths are covered — Phase 4 red: missing components; green: 89 passed
+- [ ] `npm test`, `npm run lint`, and `npm run build` succeed; results are reported, not assumed — Phase 4 recorded: `npm test` 89 passed / 17 files; `npm run lint` 0 errors (1 existing unused `_request` warning in logout handler); `npm run build` succeeded with `/mcq`, `/mcq/new`, `/mcq/[id]/edit`, `/mcq/[id]/preview`. **Phase 5** still runs this gate as the feature closeout.
 
 ---
 
@@ -901,9 +921,10 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 
 - `src/lib/db.ts` `getDb()` — D1 access
 - `src/lib/services/user-service.ts` — not used for MCQ CRUD HTTP; `users.id` is the FK target for `mcqs.created_by_user_id` and `mcq_attempts.user_id` (existence checks inside MCQ Service)
-- Existing auth UI and `POST /api/auth/logout` — list page logout
+- Existing auth UI and `POST /api/auth/logout` — list page logout; login/register now call `mcqHomeHref` (`src/lib/mcq-paths.ts:1`)
+- `src/lib/mcq-paths.ts` — keeps `userId` on MCQ routes until a session sprint exists
 - Existing shadcn/ui (`table`, `button`, `card`, `field`, `input`, `label`, `dialog`, `badge`)
-- shadcn `dropdown-menu` and `textarea` — Phase 4, after approval
+- shadcn `dropdown-menu` and `textarea` — added in Phase 4 (`npx shadcn@latest add @shadcn/dropdown-menu @shadcn/textarea`); no new npm packages
 - `zod` (^4.5.4) — already installed
 - `vitest` and Testing Library — already installed
 - Lucide `EllipsisVertical` — already available via `lucide-react`
@@ -966,7 +987,7 @@ Populate with real incidents as they are fixed. Anticipated issues:
 
 **Problem**: `npx wrangler d1 migrations apply quiz-maker --local` prints `No migrations to apply!` after filling `0002`. `PRAGMA table_info(mcqs)` still has `description` and lacks `question` and `created_by_user_id`.
 **Cause**: Wrangler had already recorded `0002` against an older local schema. Editing the same migration file does not re-apply it.
-**Solution**: Do **not** add `0003` and do **not** apply `--remote`. After Phase 1 review, reset **local** D1 only (delete `.wrangler/state/v3/d1`) and re-apply `npx wrangler d1 migrations apply quiz-maker --local` so `0001` + filled `0002` run on a clean local database. Schema tests remain the gate for the SQL in git.
+**Solution**: Do **not** add `0003`. Reset **local** D1 only (stop `npm run dev` if files are locked; delete `.wrangler/state/v3/d1`) and re-apply `npx wrangler d1 migrations apply quiz-maker --local`. Done 2026-09-02; `PRAGMA table_info(mcqs)` now has `question` and `created_by_user_id`. Schema tests remain the gate for the SQL in git. Production `0002` was applied separately on request.
 **Code Reference**: `migrations/0002_create_mcq_tables.sql:3`
 
 ### UNIQUE constraint on `(mcq_id, position)`
@@ -1005,6 +1026,34 @@ Populate with real incidents as they are fixed. Anticipated issues:
 **Cause**: Next.js 16 passes `params` as a `Promise`.
 **Solution**: `const { id } = await params` in the Server Component.
 
+### Create Save says “Unable to create question”
+
+**Problem**: After the user-id URL fix, Save still shows “Unable to create question”.
+**Cause**: Local D1 still had the old `mcqs` table (`description`, no `question` / `created_by_user_id`). Login works because `users` is fine; `INSERT` into `question` fails and the API returns 500.
+**Solution**: Stop `npm run dev` / `preview`. Delete `.wrangler/state/v3/d1`. Run `npx wrangler d1 migrations apply quiz-maker --local`. Register again (local users were wiped). Do not apply `--remote` unless asked (production already has `0002`).
+**Code Reference**: `migrations/0002_create_mcq_tables.sql:3`; `src/lib/services/mcq-service.ts:236`
+
+### Create Save says “Created by user is required”
+
+**Problem**: After login, Create MCQ → Save shows “Created by user is required to save this MCQ.”
+**Cause**: There is no session. `createdByUserId` must come from the URL (`userId`), but login/register used to send the teacher to `/mcq` without it.
+**Solution**: Login/register redirect to `/mcq?userId=` from the returned `user.id`. Create MCQ preserves that query. No cookies, JWT, or `localStorage`.
+**Code Reference**: `src/lib/mcq-paths.ts:1`; `src/components/login-form.tsx:74`; `src/components/signup-form.tsx:83`; `src/components/mcq-list.tsx:137`; `src/app/mcq/new/page.tsx:9`
+
+### Cancel is hard to see next to Save
+
+**Problem**: On Create MCQ, Cancel sits on top of Save or is clipped off the card.
+**Cause**: Default `Field` orientation is vertical with `*:w-full`, so both buttons were 100% width in a row.
+**Solution**: Use `orientation="horizontal"` and `gap-4` so the buttons keep intrinsic width.
+**Code Reference**: `src/components/mcq-form.tsx:348`
+
+### `/mcq` opens without login
+
+**Problem**: `http://localhost:3000/mcq` shows the table with no login.
+**Cause**: This sprint has no session cookie; `/mcq` and the MCQ APIs are unguarded by design (Cut).
+**Solution**: Do not add JWT, cookies, or `localStorage` here. A later session PRD should issue an HttpOnly cookie, store the session in D1, redirect `/mcq*` to `/login`, and return 401 from MCQ APIs without a valid session.
+**Code Reference**: `src/app/mcq/page.tsx:3`
+
 ### Auth UI tests fail after removing `McqStub`
 
 **Problem**: `mcq-stub.test.tsx` expects placeholder copy and no Create button.
@@ -1017,20 +1066,20 @@ Populate with real incidents as they are fixed. Anticipated issues:
 
 When working with this PRD:
 
-1. **Stop after each phase unless the user has approved the next one.** Phase 3 is done; do not start Phase 4 until review.
+1. **Stop after each phase unless the user has approved the next one.** Phase 4 is done (including post-review create/save/Cancel fixes). Do not start Phase 5 until review. Do not start a session/cookie sprint from this PRD.
 2. Start by reading Overview and Hypothesis: shared teacher test-bank CRUD, not sessions, not AI, not a student quiz runner.
-3. Use Scope (In/Out/Cut) as a hard boundary. Do not add JWT, cookies, OAuth, a `description` column, attempt-taking UI, or extra question types. Do persist `question` and `created_by_user_id` as specified.
+3. Use Scope (In/Out/Cut) as a hard boundary. Do not add JWT, cookies, OAuth, a `description` column, attempt-taking UI, or extra question types. Do persist `question` and `created_by_user_id` as specified. Keep `?userId=` as the create attribution until a session sprint exists.
 4. Follow the **TDD** cycle in Testing for Phases 1–4: write the listed tests first, run `npm test` (expect red), then implement until green. Do not implement first and retrofit tests. Phase 5 runs the accumulated suite; if a gap is found, still red then green.
 5. Write schema into existing `migrations/0002_create_mcq_tables.sql`. Do not create `0003` for these three tables.
 6. Reuse `getDb()`. Do not query D1 from route handlers or client components.
 7. Keep the `handler.ts` / `route.ts` split. Tests import `./handler`.
-8. Propose shadcn `dropdown-menu` and `textarea` in Phase 4 before adding them. Ask before any new npm package.
+8. shadcn `dropdown-menu` and `textarea` are already added. Ask before any new npm package.
 9. Preserve logout on `/mcq`. Preserve all auth tests.
 10. Update phase status markers as work progresses (`PLANNED` → `IN PROGRESS` → `COMPLETED`).
 11. Add concrete `filepath:line-number` references under Technical Implementation Details as code is written.
 12. Mark acceptance criteria when they are verified, not when files merely exist.
 13. Add troubleshooting entries when bugs are found and fixed.
-14. Never deploy. Never apply D1 migrations remotely.
+14. Never deploy. Never apply D1 migrations remotely unless the user explicitly asks.
 15. Verify with `npm test`, `npm run lint`, and `npm run build` before calling a phase done.
 16. After implementation is approved and shipped, update `AGENTS.md` so it no longer describes `/mcq` as a stub.
 
@@ -1039,6 +1088,15 @@ When working with this PRD:
 ## Current Status
 
 **Last Updated**: 2026-09-02
-**Current Phase**: Phase 3 - MCQ and Attempt APIs
-**Status**: COMPLETED (awaiting review)
-**Next Steps**: Review Phase 3. After approval, begin Phase 4 (UI tests first; propose shadcn `dropdown-menu` and `textarea` before adding them). Do not start Phase 4 before that approval.
+**Current Phase**: Phase 4 - MCQ UI
+**Status**: COMPLETED (post-review fixes included; awaiting review before Phase 5)
+
+| Phase | Name | Status |
+|-------|------|--------|
+| 1 | Database Foundation | COMPLETED (local D1 reset 2026-09-02; remote `0002` applied on request) |
+| 2 | MCQ Service | COMPLETED |
+| 3 | MCQ and Attempt APIs | COMPLETED |
+| 4 | MCQ UI | COMPLETED (`McqStub` gone; `?userId=` threaded; Cancel spacing fixed) |
+| 5 | Verification | PLANNED |
+
+**Next Steps**: Review Phase 4. After approval, begin Phase 5 (accumulated `npm test`, lint, build, and the teacher flow). Do not start Phase 5 before that approval. Session/cookie protection of `/mcq` is **not** Phase 5 — it needs its own PRD.

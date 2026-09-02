@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { sha256Hex } from "@/lib/password";
+import { mcqHomeHref } from "@/lib/mcq-paths";
 
 export function LoginForm({
 	className,
@@ -52,7 +53,10 @@ export function LoginForm({
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ identifier, password: hashedPassword }),
 			});
-			const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
+			const payload = (await response.json().catch(() => null)) as {
+				error?: unknown;
+				user?: { id?: unknown };
+			} | null;
 
 			if (!response.ok) {
 				setError(
@@ -63,7 +67,11 @@ export function LoginForm({
 				return;
 			}
 
-			router.push("/mcq");
+			const userId =
+				typeof payload?.user?.id === "string" && payload.user.id.length > 0
+					? payload.user.id
+					: undefined;
+			router.push(mcqHomeHref(userId));
 		} catch {
 			setError("Unable to log in");
 		} finally {

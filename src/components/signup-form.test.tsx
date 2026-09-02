@@ -45,7 +45,9 @@ describe("SignupForm", () => {
 		const user = userEvent.setup();
 		const plaintext = "secret123";
 		vi.mocked(fetch).mockResolvedValue(
-			jsonResponse(201, { user: { username: "ada", email: "ada@school.edu" } }) as Response,
+			jsonResponse(201, {
+				user: { id: "u1", username: "ada", email: "ada@school.edu" },
+			}) as Response,
 		);
 
 		render(<SignupForm />);
@@ -75,7 +77,7 @@ describe("SignupForm", () => {
 		});
 		expect(body.password).toBe(await sha256Hex(plaintext));
 		expect(body.password).not.toBe(plaintext);
-		expect(pushMock).toHaveBeenCalledWith("/mcq");
+		expect(pushMock).toHaveBeenCalledWith("/mcq?userId=u1");
 	});
 
 	it("surfaces a 409 duplicate username and does not navigate", async () => {
