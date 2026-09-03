@@ -72,7 +72,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 				return;
 			}
 
-			router.push("/mcq");
+			router.push("/login");
 		} catch {
 			setError("Unable to register");
 		} finally {

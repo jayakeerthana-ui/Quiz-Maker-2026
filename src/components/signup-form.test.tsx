@@ -41,7 +41,7 @@ describe("SignupForm", () => {
 		expect((screen.getByLabelText(/^email$/i) as HTMLInputElement).required).toBe(true);
 	});
 
-	it("hashes the password before fetch and navigates to /mcq on 201", async () => {
+	it("hashes the password before fetch and navigates to /login on 201", async () => {
 		const user = userEvent.setup();
 		const plaintext = "secret123";
 		vi.mocked(fetch).mockResolvedValue(
@@ -75,7 +75,8 @@ describe("SignupForm", () => {
 		});
 		expect(body.password).toBe(await sha256Hex(plaintext));
 		expect(body.password).not.toBe(plaintext);
-		expect(pushMock).toHaveBeenCalledWith("/mcq");
+		expect(pushMock).toHaveBeenCalledWith("/login");
+		expect(pushMock).not.toHaveBeenCalledWith("/mcq");
 	});
 
 	it("surfaces a 409 duplicate username and does not navigate", async () => {
