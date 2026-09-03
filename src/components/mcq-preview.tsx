@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
 import { mcqHomeHref } from "@/lib/mcq-paths";
@@ -15,6 +14,19 @@ type LoadedMcq = {
 };
 
 type CheckResult = "correct" | "incorrect";
+
+function errorMessage(payload: unknown, fallback: string) {
+	if (
+		payload &&
+		typeof payload === "object" &&
+		"error" in payload &&
+		typeof payload.error === "string" &&
+		payload.error.length > 0
+	) {
+		return payload.error;
+	}
+	return fallback;
+}
 
 export function McqPreview({
 	mcqId,
@@ -29,6 +41,8 @@ export function McqPreview({
 	const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
 	const [result, setResult] = useState<CheckResult | null>(null);
 	const [selectionError, setSelectionError] = useState<string | null>(null);
+	const [attemptCount, setAttemptCount] = useState(0);
+	const [pending, setPending] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -65,16 +79,46 @@ export function McqPreview({
 		};
 	}, [mcqId]);
 
-	function checkAnswer() {
+	async function checkAnswer() {
 		if (!mcq || !selectedChoiceId) {
 			setResult(null);
 			setSelectionError("Select an answer first");
 			return;
 		}
 
-		const selected = mcq.choices.find((choice) => choice.id === selectedChoiceId);
+		if (!createdByUserId) {
+			setResult(null);
+			setSelectionError("A user is required to record this attempt.");
+			return;
+		}
+
 		setSelectionError(null);
-		setResult(selected?.isCorrect ? "correct" : "incorrect");
+		setPending(true);
+		try {
+			const response = await fetch("/api/mcq-attempts", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					mcqId,
+					userId: createdByUserId,
+					choiceId: selectedChoiceId,
+				}),
+			});
+			const payload = (await response.json().catch(() => null)) as
+				| { attempt?: { isCorrect?: boolean }; error?: string }
+				| null;
+			if (!response.ok) {
+				setSelectionError(errorMessage(payload, "Unable to record this attempt."));
+				return;
+			}
+
+			setAttemptCount((count) => count + 1);
+			setResult(payload?.attempt?.isCorrect ? "correct" : "incorrect");
+		} catch {
+			setSelectionError("Unable to record this attempt.");
+		} finally {
+			setPending(false);
+		}
 	}
 
 	if (loadState === "loading") {
@@ -98,6 +142,8 @@ export function McqPreview({
 		);
 	}
 
+	const solved = result === "correct";
+
 	return (
 		<div className="flex min-h-svh w-full justify-center p-6 md:p-10">
 			<div className="flex w-full max-w-2xl flex-col gap-6">
@@ -109,7 +155,7 @@ export function McqPreview({
 				</div>
 				<h1 className="font-heading text-2xl font-medium">{mcq.name}</h1>
 				<p className="text-base">{mcq.question}</p>
-				<fieldset className="flex flex-col gap-3 border-0 p-0">
+				<fieldset className="flex flex-col gap-3 border-0 p-0" disabled={solved || pending}>
 					<legend className="sr-only">Choices</legend>
 					<ol className="flex flex-col gap-3">
 						{mcq.choices.map((choice) => (
@@ -121,20 +167,26 @@ export function McqPreview({
 											name="preview-choice"
 											value={choice.id}
 											checked={selectedChoiceId === choice.id}
+											disabled={solved || pending}
 											onChange={() => {
 												setSelectedChoiceId(choice.id);
 												setSelectionError(null);
+												if (result === "incorrect") {
+													setResult(null);
+												}
 											}}
 											className="mt-1"
 										/>
 										<span>{choice.body}</span>
 									</span>
-									{result && choice.isCorrect ? <Badge>Correct</Badge> : null}
 								</label>
 							</li>
 						))}
 					</ol>
 				</fieldset>
+				{attemptCount > 0 ? (
+					<p className="text-sm text-muted-foreground">Attempts: {attemptCount}</p>
+				) : null}
 				{selectionError ? <FieldError>{selectionError}</FieldError> : null}
 				{result === "correct" ? (
 					<p role="alert" className="text-sm font-medium">
@@ -146,9 +198,11 @@ export function McqPreview({
 						Incorrect
 					</p>
 				) : null}
-				<Button type="button" onClick={checkAnswer}>
-					Check answer
-				</Button>
+				{solved ? null : (
+					<Button type="button" onClick={() => void checkAnswer()} disabled={pending}>
+						Check answer
+					</Button>
+				)}
 			</div>
 		</div>
 	);

@@ -32,6 +32,50 @@ const loadedMcq = {
 	],
 };
 
+function mockPreviewFetch(
+	existingAttempts: { id: string; mcqId: string; isCorrect: boolean }[] = [],
+) {
+	vi.mocked(fetch).mockImplementation(async (input, init) => {
+		const url = String(input);
+		const method = (init as RequestInit | undefined)?.method ?? "GET";
+
+		if (url === "/api/mcqs/q1") {
+			return jsonResponse(200, { mcq: loadedMcq }) as Response;
+		}
+
+		if (url === "/api/mcq-attempts?userId=u1" && method === "GET") {
+			return jsonResponse(200, {
+				attempts: existingAttempts.map((attempt) => ({
+					...attempt,
+					userId: "u1",
+					choiceId: attempt.isCorrect ? "c1" : "c2",
+					createdAt: "2026-01-01T00:00:00.000Z",
+				})),
+			}) as Response;
+		}
+
+		if (url === "/api/mcq-attempts" && method === "POST") {
+			const body = JSON.parse(String((init as RequestInit).body)) as {
+				mcqId: string;
+				userId: string;
+				choiceId: string;
+			};
+			return jsonResponse(201, {
+				attempt: {
+					id: "a-new",
+					mcqId: body.mcqId,
+					userId: body.userId,
+					choiceId: body.choiceId,
+					isCorrect: body.choiceId === "c1",
+					createdAt: "2026-01-01T00:00:00.000Z",
+				},
+			}) as Response;
+		}
+
+		return jsonResponse(404, { error: "not found" }) as Response;
+	});
+}
+
 describe("McqPreview", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -56,17 +100,22 @@ describe("McqPreview", () => {
 
 	it("asks to select an answer before checking", async () => {
 		const user = userEvent.setup();
-		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { mcq: loadedMcq }) as Response);
+		mockPreviewFetch();
 
-		render(<McqPreview mcqId="q1" />);
+		render(<McqPreview mcqId="q1" createdByUserId="u1" />);
 		await waitFor(() => screen.getByRole("button", { name: /check answer/i }));
 		await user.click(screen.getByRole("button", { name: /check answer/i }));
 
 		expect(screen.getByRole("alert").textContent).toMatch(/select an answer/i);
 		expect(screen.queryByText(/^correct$/i)).toBeNull();
+		expect(
+			vi.mocked(fetch).mock.calls.some(([url, init]) => {
+				return url === "/api/mcq-attempts" && (init as RequestInit | undefined)?.method === "POST";
+			}),
+		).toBe(false);
 	});
 
-	it("marks a correct selection as Correct after Check answer", async () => {
+	it("does not POST an attempt when the user id is missing", async () => {
 		const user = userEvent.setup();
 		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { mcq: loadedMcq }) as Response);
 
@@ -75,23 +124,61 @@ describe("McqPreview", () => {
 		await user.click(screen.getByRole("radio", { name: /oxygen/i }));
 		await user.click(screen.getByRole("button", { name: /check answer/i }));
 
-		expect(screen.getByRole("alert").textContent).toMatch(/^correct$/i);
-		expect(fetch).not.toHaveBeenCalledWith(
-			expect.stringContaining("/api/mcq-attempts"),
-			expect.anything(),
-		);
+		expect(screen.getByRole("alert").textContent).toMatch(/user is required/i);
+		expect(
+			vi.mocked(fetch).mock.calls.some(([url, init]) => {
+				return url === "/api/mcq-attempts" && (init as RequestInit | undefined)?.method === "POST";
+			}),
+		).toBe(false);
 	});
 
-	it("marks a wrong selection as Incorrect and then shows the correct choice", async () => {
+	it("records a wrong selection as Incorrect without revealing the correct choice", async () => {
 		const user = userEvent.setup();
-		vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { mcq: loadedMcq }) as Response);
+		mockPreviewFetch();
 
-		render(<McqPreview mcqId="q1" />);
+		render(<McqPreview mcqId="q1" createdByUserId="u1" />);
 		await waitFor(() => screen.getByRole("radio", { name: /nitrogen/i }));
 		await user.click(screen.getByRole("radio", { name: /nitrogen/i }));
 		await user.click(screen.getByRole("button", { name: /check answer/i }));
 
-		expect(screen.getByRole("alert").textContent).toMatch(/^incorrect$/i);
-		expect(screen.getByText(/^correct$/i)).toBeTruthy();
+		await waitFor(() => {
+			expect(screen.getByRole("alert").textContent).toMatch(/^incorrect$/i);
+		});
+		expect(screen.queryByText(/^correct$/i)).toBeNull();
+		expect(screen.getByText(/attempts:\s*1/i)).toBeTruthy();
+
+		const postCall = vi.mocked(fetch).mock.calls.find(([url, init]) => {
+			return url === "/api/mcq-attempts" && (init as RequestInit | undefined)?.method === "POST";
+		});
+		expect(postCall).toBeTruthy();
+		const body = JSON.parse(String((postCall?.[1] as RequestInit).body)) as {
+			mcqId: string;
+			userId: string;
+			choiceId: string;
+		};
+		expect(body).toEqual({ mcqId: "q1", userId: "u1", choiceId: "c2" });
+		expect(body).not.toHaveProperty("isCorrect");
+	});
+
+	it("records each check and shows how many attempts it took to answer correctly", async () => {
+		const user = userEvent.setup();
+		mockPreviewFetch();
+
+		render(<McqPreview mcqId="q1" createdByUserId="u1" />);
+		await waitFor(() => screen.getByRole("radio", { name: /nitrogen/i }));
+		await user.click(screen.getByRole("radio", { name: /nitrogen/i }));
+		await user.click(screen.getByRole("button", { name: /check answer/i }));
+		await waitFor(() => {
+			expect(screen.getByText(/attempts:\s*1/i)).toBeTruthy();
+		});
+
+		await user.click(screen.getByRole("radio", { name: /oxygen/i }));
+		await user.click(screen.getByRole("button", { name: /check answer/i }));
+
+		await waitFor(() => {
+			expect(screen.getByRole("alert").textContent).toMatch(/^correct$/i);
+		});
+		expect(screen.getByText(/attempts:\s*2/i)).toBeTruthy();
+		expect(screen.queryByRole("button", { name: /check answer/i })).toBeNull();
 	});
 });

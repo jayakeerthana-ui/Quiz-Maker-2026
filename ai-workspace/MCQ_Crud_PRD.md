@@ -1,5 +1,5 @@
 Date created: 2026-09-02
-Date last modified: 2026-09-02
+Date last modified: 2026-09-03
 
 # MCQ CRUD - Technical PRD
 
@@ -7,7 +7,7 @@ Date last modified: 2026-09-02
 
 Quiz Maker’s authentication foundation used to land teachers on a placeholder MCQ Management page (`/mcq`) that stated question CRUD was not available yet. This feature replaces that stub with a shared test-bank workspace: a table of questions (short name plus the question stem), a dedicated create/edit page, a preview, deletion, attribution of each MCQ to the creating user, and the service/API layers needed to persist questions, choices, and attempts.
 
-**As of 2026-09-02:** Phases 1–5 are **COMPLETED** on `feature/mcq-crud`. Schema, MCQ Service, HTTP APIs, and list/create/edit/preview UI are in the app and verified (Vitest, lint, build, teacher flow on production). Preview now waits for **Check answer** before showing Correct/Incorrect. `/mcq` is still reachable without a session — that is out of scope here; a later session PRD is the intended fix.
+**As of 2026-09-03:** Phases 1–5 are **COMPLETED** on `feature/mcq-crud`. Preview Check answer grades via `POST /api/mcq-attempts`, shows Correct or Incorrect without revealing the right choice on a miss, and displays how many attempts it took. `/mcq` is still reachable without a session — that is out of scope here; a later session PRD is the intended fix.
 
 ---
 
@@ -32,7 +32,7 @@ This feature builds on `feature/user-authentication` (see `ai-workspace/USER_AUT
 - Replace `/mcq` stub with a question table (name, question, Actions) plus a **Create MCQ** button and the existing **Log out** control
 - Dedicated create/edit page with **Save** and **Cancel**
 - Row Actions menu (three vertical dots): **Edit**, **Preview**, **Delete**
-- Preview page: teacher-facing view of one question; select a choice and Check answer to see Correct or Incorrect (choices are not editable)
+- Preview page: teacher-facing view of one question; select a choice and Check answer to see Correct or Incorrect without revealing the right choice on a miss; each check POSTs `/api/mcq-attempts` and shows how many attempts it took
 - Delete confirmation (existing shadcn `dialog`) before the question is removed
 - shadcn/ui: existing `table`, `button`, `card`, `field`, `input`, `label`, `dialog`, plus components proposed in Phase 4 (`dropdown-menu`, `textarea`)
 - Vitest unit tests written with **TDD** in every implementation phase: failing tests first (**red**), then only enough product code to make them pass (**green**)
@@ -44,7 +44,7 @@ This feature builds on `feature/user-authentication` (see `ai-workspace/USER_AUT
 - Ownership-based access (only the creator may edit or delete); `created_by_user_id` is stored and returned, but every teacher can still see and mutate the shared bank
 - Folders, tags, TEKS/standards alignment, or search/filter/pagination
 - Multiple correct answers, true/false-only types, or question types other than single-correct MCQ
-- Student-facing quiz runner, timed quizzes, scoring dashboards, or recording attempts from Preview
+- Student-facing quiz runner, timed quizzes, or scoring dashboards
 - Bulk import/export of questions
 - AI-generated questions or any AI SDK usage
 - New npm dependencies unless proposed at the start of a phase and approved
@@ -55,8 +55,7 @@ This feature builds on `feature/user-authentication` (see `ai-workspace/USER_AUT
 - **Changing `created_by_user_id` on update** — the author is set at create and is immutable. PUT must not accept or alter it.
 - **Filtering the list by creator** — all teachers see all MCQs. Storing the author is not the same as scoping the bank.
 - **A teacher-facing “Created by” input** — create/edit collect **Name**, **Question**, and choices only. `createdByUserId` is a required create-API field, not a form field the teacher types.
-- **Recording an attempt from Preview** — Preview lets the teacher pick a choice and Check answer locally. Do not POST `/api/mcq-attempts` from this page; attempt **table, service, and APIs** stay for a later student-taking sprint.
-- **Updating or deleting an attempt** — attempts are an append-only record of what was chosen. “Managing” in this sprint means **create + list/get**.
+- **Updating or deleting an attempt** — attempts are an append-only record of what was chosen. “Managing” in this sprint means **create + list/get**. Preview records attempts; it does not edit or delete them.
 - **Unique question names** — teachers may reuse titles; identity is the `id`.
 - **Server Actions for MCQ mutations** — the Next.js workspace rule prefers Server Actions, but auth already uses App Router `handler.ts` + client `fetch`. This feature matches that tested pattern so UI tests can keep mocking `fetch`.
 - **`@cloudflare/vitest-pool-workers`** — unit tests mock D1 / `getDb()`; do not change the Vitest harness.
@@ -510,8 +509,10 @@ Icons: Lucide `EllipsisVertical` (three vertical dots) for Actions. Do not use a
 
 - Title: **Preview**.
 - Load `GET /api/mcqs/:id`. Show **name** (as a heading), **question** (the stem), and choices in `position` order as selectable radios.
-- Do not reveal the correct choice until the teacher clicks **Check answer**. If no choice is selected, show “Select an answer first”. After a check, show **Correct** or **Incorrect**, then mark the stored correct choice with the existing `badge`.
-- Do not include Save. Do not POST an attempt from this page (grade locally from the GET payload).
+- Do not reveal which choice is stored as correct. If no choice is selected, show “Select an answer first”. After **Check answer**, show only **Correct** or **Incorrect**. A wrong check must not mark the right choice.
+- Each Check answer `POST`s `/api/mcq-attempts` with `mcqId`, `userId` (from `?userId=`), and `choiceId`. Trust the returned `attempt.isCorrect`. Show **Attempts: N** for checks in this visit. After a correct check, stop further checks.
+- Missing `userId`: show that a user is required to record the attempt; do not POST.
+- Do not include Save.
 - **Back** (or equivalent) to `/mcq`. Unknown id: same not-found treatment as edit.
 - Choice text is not editable.
 
@@ -711,7 +712,7 @@ Do not start Phase 2 until Phase 1 has been reviewed.
    - List: heading MCQ Management; **Create MCQ** navigates to `/mcq/new`; table headers Name, Question, Actions; rows render fetched name and question; empty copy when `mcqs: []`; Actions menu contains Edit, Preview, Delete; Delete confirms then `DELETE`s; **Log out** still `POST /api/auth/logout` and goes to `/login` even on failure
    - Create form: Name and Question required; two choice rows by default; Add choice until 6; cannot remove below 2; Save `POST`s `/api/mcqs` including `createdByUserId` and navigates to `/mcq` on 201; Cancel goes to `/mcq` without POST; validation error is shown and does not navigate
    - Edit form: loads GET by id into Name, Question, and choices; Save `PUT`s name/question/choices (no `createdByUserId`) and navigates on 200
-   - Preview: shows name, question stem, and choices as radios; does not reveal Correct until **Check answer**; then Correct or Incorrect; no Save
+   - Preview: shows name, question stem, and choices as radios; Check answer POSTs an attempt; Incorrect does not reveal the right choice; Attempts count; no Save
 3. Mock `fetch` and navigation. Do not boot Next.js or D1.
 4. Remove or replace `mcq-stub.test.tsx` so the suite does not assert that CRUD is absent.
 5. Run `npm test`. Expect **red**.
@@ -735,7 +736,7 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 - `src/components/login-form.tsx:74` and `src/components/signup-form.tsx:83` — redirect to `/mcq?userId=` from `user.id`
 - `src/components/mcq-list.tsx:51` — table, Create MCQ (`:137` uses `mcqNewHref`); Actions menu; delete dialog at `:109`; logout at `:97`
 - `src/components/mcq-form.tsx:57` — shared create/edit; Save at `:162`; Save/Cancel row at `:348` (`orientation="horizontal"`, `gap-4`); no Created-by field
-- `src/components/mcq-preview.tsx:19` — name, stem, selectable choices; Check answer grades locally; Correct badge only after check; no Save / no attempt POST
+- `src/components/mcq-preview.tsx:31` — name, stem, selectable choices; Check answer POSTs `/api/mcq-attempts`; Correct/Incorrect without revealing the right choice on a miss; Attempts count; no Save
 - `src/app/mcq/page.tsx:3` — list (`userId` at `:8`); `src/app/mcq/new/page.tsx:3` — create; edit at `src/app/mcq/[id]/edit/page.tsx:3`; preview at `src/app/mcq/[id]/preview/page.tsx:3`
 - Tests: `src/components/mcq-list.test.tsx`, `mcq-form.test.tsx`, `mcq-preview.test.tsx`; `mcq-stub.test.tsx` removed
 
@@ -744,7 +745,8 @@ Do not start Phase 2 until Phase 1 has been reviewed.
 - Create Save required `createdByUserId` — fixed by threading `user.id` on the URL (not cookies)
 - Create then 500 “Unable to create question” — local D1 still had `description`; reset and re-applied `0001`+`0002`; teacher then saved an MCQ
 - Cancel hard to see next to Save — Field was `*:w-full`; now horizontal with `gap-4`
-- Preview showed the Correct badge immediately — teacher asked to try an answer first; radios + **Check answer** grade locally (still no `POST /api/mcq-attempts`)
+- Preview showed the Correct badge immediately — teacher asked to try an answer first; radios + **Check answer**
+- A wrong check still marked the stored correct choice — Preview now shows only Incorrect and records `POST /api/mcq-attempts`; Attempts count until the correct choice is selected
 
 **Deliverables:**
 
@@ -766,7 +768,7 @@ This phase does not add a new red suite. It runs the accumulated tests as the co
 **Implementation / verification:**
 
 1. Run `npm run lint` and `npm run build` and record the actual result
-2. Exercise: login → `/mcq` empty or populated → Create MCQ (name + question + 2 choices, then add to 3) → Save → row in table shows name and question → Edit → Save → Preview shows stem without revealing the answer → select a choice → **Check answer** → Correct or Incorrect → Delete with confirm → row gone → Log out → `/login`
+2. Exercise: login → `/mcq` empty or populated → Create MCQ (name + question + 2 choices, then add to 3) → Save → row in table shows name and question → Edit → Save → Preview shows stem without revealing the answer → select a wrong choice → **Check answer** → Incorrect (right choice still unmarked) → select the right choice → Correct and Attempts count → Delete with confirm → row gone → Log out → `/login`
 3. Exercise API failure paths with unit tests already in place; optionally `curl` 400 (one choice) and 404 (unknown id) against `npm run preview` when Workers D1 is available
 4. Confirm local D1 has rows in `mcqs` / `mcq_choices` after a successful create (when local migrations apply)
 
@@ -791,7 +793,7 @@ This phase does not add a new red suite. It runs the accumulated tests as the co
 
 No new product files in the original Phase 5 pass. `AGENTS.md` project blurb updated so `/mcq` is no longer described as a stub.
 
-**Post-review (Preview Check answer, 2026-09-02):** Teacher asked not to see the correct choice until they pick one. Preview now uses radios and **Check answer** (local grade from GET payload). `npm test` **92 passed** / 17 files; lint 0 errors 1 warning; build ok. Still no `POST /api/mcq-attempts` from this page.
+**Post-review (Preview Check answer, 2026-09-03):** Teacher asked not to see the correct choice on a miss, and to record how many attempts it takes. Preview POSTs `/api/mcq-attempts` on Check answer, shows only Correct or Incorrect, and displays **Attempts: N**.
 
 **Deliverables:**
 
@@ -821,7 +823,7 @@ No new product files in the original Phase 5 pass. `AGENTS.md` project blurb upd
 - `src/app/mcq/[id]/preview/page.tsx:3` — preview page
 - `src/components/mcq-list.tsx:51` — table, create button at `:137`, logout at `:97`, delete dialog at `:109`
 - `src/components/mcq-form.tsx:57` — shared create/edit form; Save at `:162`; Save/Cancel at `:348`
-- `src/components/mcq-preview.tsx:19` — select a choice, Check answer, then Correct or Incorrect
+- `src/components/mcq-preview.tsx:31` — select a choice, Check answer POSTs an attempt, then Correct or Incorrect; Attempts count
 - `src/components/login-form.tsx:74` — post-login `/mcq?userId=`
 - `src/components/signup-form.tsx:83` — post-register `/mcq?userId=`
 - `src/components/mcq-stub.tsx` — **removed** in Phase 4
@@ -908,7 +910,7 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 - [x] Cancel on create/edit returns to `/mcq` without saving — UI tests, 2026-09-02 (keeps `?userId=` via `mcqHomeHref`)
 - [x] Actions menu (three vertical dots) offers Edit, Preview, and Delete — UI tests, 2026-09-02
 - [x] Edit loads the question into the same form and Save updates it — UI tests, 2026-09-02
-- [x] Preview shows the name, the question stem, and choices as radios; **Check answer** then shows Correct or Incorrect and the Correct badge; it does not edit or record an attempt — UI tests, 2026-09-02
+- [x] Preview shows the name, the question stem, and choices as radios; **Check answer** POSTs `/api/mcq-attempts` and shows Correct or Incorrect without revealing the right choice on a miss; it shows Attempts: N and does not edit attempts — UI tests, 2026-09-03
 - [x] Delete asks for confirmation, then removes the row — UI tests, 2026-09-02
 - [x] Log out from `/mcq` still calls `POST /api/auth/logout` and returns to `/login` — UI tests, 2026-09-02
 - [x] No JWT, cookies, social login, or session store is introduced — `/mcq` remains unguarded by design
@@ -987,7 +989,7 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 - **Risk**: Create form with two empty extra fields feels like a crash if Save is clicked immediately.
 - **Mitigation**: Client `FieldError` for empty name, empty question, empty choice bodies, and for “exactly one correct”; disable Save while pending.
 - **Risk**: Teachers look for a student “take quiz” on Preview.
-- **Mitigation**: Preview lets the teacher select a choice and Check answer locally. It still does not POST an attempt or act as a scored quiz runner. Attempt APIs exist but are not wired to this page.
+- **Mitigation**: Preview lets the teacher select a choice, Check answer, and record attempts. It is not a scored quiz runner (no timer, dashboard, or multi-question quiz).
 
 ---
 
@@ -1090,8 +1092,15 @@ Populate with real incidents as they are fixed. Anticipated issues:
 
 **Problem**: Opening Preview marks the right choice with a Correct badge before the teacher answers.
 **Cause**: Phase 4 Preview was a teacher inspection screen that revealed `isCorrect` on load.
-**Solution**: Present choices as radios. **Check answer** grades locally from the GET payload and then shows Correct or Incorrect. Do not POST `/api/mcq-attempts` from this page.
-**Code Reference**: `src/components/mcq-preview.tsx:19`; `src/components/mcq-preview.test.tsx`
+**Solution**: Present choices as radios. **Check answer** `POST`s `/api/mcq-attempts` and shows only Correct or Incorrect. A wrong check must not mark the stored correct choice.
+**Code Reference**: `src/components/mcq-preview.tsx:31`; `src/components/mcq-preview.test.tsx`
+
+### A wrong Preview check still reveals the correct choice (2026-09-03)
+
+**Problem**: After Check answer on a wrong choice, Incorrect appears and the right choice is also badged Correct.
+**Cause**: Preview revealed `choice.isCorrect` after any check.
+**Solution**: Grade from the recorded attempt. Show only Correct or Incorrect. Keep an Attempts count for this visit. Stop further checks after a correct attempt.
+**Code Reference**: `src/components/mcq-preview.tsx:82`; `src/components/mcq-preview.test.tsx`
 
 ---
 
@@ -1101,7 +1110,7 @@ When working with this PRD:
 
 1. **Stop after each phase unless the user has approved the next one.** Phase 5 is done. Do not start a session/cookie sprint from this PRD.
 2. Start by reading Overview and Hypothesis: shared teacher test-bank CRUD, not sessions, not AI, not a student quiz runner.
-3. Use Scope (In/Out/Cut) as a hard boundary. Do not add JWT, cookies, OAuth, a `description` column, extra question types, or POST `/api/mcq-attempts` from Preview. Preview may Check answer locally. Do persist `question` and `created_by_user_id` as specified. Keep `?userId=` as the create attribution until a session sprint exists.
+3. Use Scope (In/Out/Cut) as a hard boundary. Do not add JWT, cookies, OAuth, a `description` column, extra question types, or a scored quiz runner. Preview Check answer must POST `/api/mcq-attempts` and must not reveal the stored correct choice on a miss. Do persist `question` and `created_by_user_id` as specified. Keep `?userId=` as the create/attempt attribution until a session sprint exists.
 4. Follow the **TDD** cycle in Testing for Phases 1–4: write the listed tests first, run `npm test` (expect red), then implement until green. Do not implement first and retrofit tests. Phase 5 runs the accumulated suite; if a gap is found, still red then green.
 5. Write schema into existing `migrations/0002_create_mcq_tables.sql`. Do not create `0003` for these three tables.
 6. Reuse `getDb()`. Do not query D1 from route handlers or client components.
@@ -1120,7 +1129,7 @@ When working with this PRD:
 
 ## Current Status
 
-**Last Updated**: 2026-09-02
+**Last Updated**: 2026-09-03
 **Current Phase**: Phase 5 - Verification
 **Status**: COMPLETED
 
@@ -1132,4 +1141,4 @@ When working with this PRD:
 | 4 | MCQ UI | COMPLETED |
 | 5 | Verification | COMPLETED |
 
-**Next Steps**: Preview Check answer is in. Session/cookie protection of `/mcq` is **not** part of this PRD — it needs its own sprint.
+**Next Steps**: Preview records attempts and hides the right choice on a miss. Session/cookie protection of `/mcq` is **not** part of this PRD — it needs its own sprint.

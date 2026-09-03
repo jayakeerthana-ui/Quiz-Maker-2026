@@ -14,10 +14,11 @@ Keep it current. An out-of-date description here misleads every future conversat
 Quiz Maker is a greenfield app for teachers who share a bank of multiple-choice
 questions. User authentication (D1 users, hashed register/login APIs, and shadcn
 login/register UI) and MCQ CRUD (three D1 tables, MCQ Service, HTTP APIs, and
-list/create/edit/preview) are on `feature/mcq-crud`. Preview grades a selected
-choice after Check answer and does not record an attempt. There is still no
-session cookie; `/mcq` is reachable by URL. Technical PRDs in `ai-workspace/`
-are the source of truth for what is being built and the current phase.
+list/create/edit/preview) are on `feature/mcq-crud`. Preview Check answer records
+an attempt and shows Correct or Incorrect without revealing the right choice on
+a miss. There is still no session cookie; `/mcq` is reachable by URL. Technical
+PRDs in `ai-workspace/` are the source of truth for what is being built and the
+current phase.
 
 ## Stack
 
