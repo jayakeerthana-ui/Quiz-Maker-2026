@@ -492,7 +492,7 @@ Icons: Lucide `EllipsisVertical` (three vertical dots) for Actions. Do not use a
   1. **Name** (`name`, `Input`, required, 1–200) — short identifiable label. Helper: “A short name for this MCQ in the table.”
   2. **Question** (`question`, `Textarea`, required, 1–2000) — the prompt presented to the user. Helper: “This is the question text shown in preview.”
   3. **Choices** — start with **two** rows. Each row: choice body (`Input`, required) and a control to mark **this** row as the correct answer (radio or exclusive toggle; exactly one selected). Rows numbered from 1 to match `position`.
-- Do **not** show a Created-by field. The form receives `createdByUserId` as a Client Component prop (from the page). Login (`src/components/login-form.tsx:74`) and register (`src/components/signup-form.tsx:83`) redirect to `/mcq?userId=` via `mcqHomeHref` (`src/lib/mcq-paths.ts:1`). The list page reads that search param (`src/app/mcq/page.tsx:8`) and Create MCQ keeps it (`mcqNewHref` at `src/lib/mcq-paths.ts:8`). If the prop is missing, Save shows a form-level error and does not `POST`.
+- Do **not** show a Created-by field. The form receives `createdByUserId` as a Client Component prop (from the page). Login (`src/components/login-form.tsx:74`) redirects to `/mcq?userId=` via `mcqHomeHref` (`src/lib/mcq-paths.ts:1`). Registration (`src/components/signup-form.tsx`) redirects to `/login` on 201; the teacher must log in before `/mcq`. The list page reads that search param (`src/app/mcq/page.tsx:8`) and Create MCQ keeps it (`mcqNewHref` at `src/lib/mcq-paths.ts:8`). If the prop is missing, Save shows a form-level error and does not `POST`.
 - **Add choice** adds a row until 6; the control is disabled or hidden at 6. Helper text: “2 to 6 choices. Exactly one must be marked correct.”
 - **Remove** on a row is available only when there are more than 2 choices.
 - Default: first choice marked correct so the form is submittable without an extra click; the teacher can change it.
@@ -526,7 +526,7 @@ Icons: Lucide `EllipsisVertical` (three vertical dots) for Actions. Do not use a
 
 This is the path a teacher follows after login. `userId` is threaded on the URL until a session sprint exists; it is not a cookie.
 
-1. **Sign in or register.** Login (`src/components/login-form.tsx:74`) and register (`src/components/signup-form.tsx:83`) read `user.id` and `router.push(mcqHomeHref(userId))` → `/mcq?userId=…` (`src/lib/mcq-paths.ts:1`).
+1. **Register, then sign in.** New teachers register (`src/components/signup-form.tsx`); on 201 they go to `/login`, not `/mcq`. Existing teachers open `/login` directly. Login (`src/components/login-form.tsx:74`) reads `user.id` and `router.push(mcqHomeHref(userId))` → `/mcq?userId=…` (`src/lib/mcq-paths.ts:1`).
 2. **MCQ Management list.** `src/app/mcq/page.tsx:8` passes that query to `McqList`. `GET /api/mcqs` loads Name, Question, Actions. **Create MCQ** uses `mcqNewHref` (`mcq-paths.ts:8`). **Log out** stays on this page only.
 3. **Create.** `/mcq/new` collects Name, Question, and 2–6 choices (exactly one marked correct). Save `POST /api/mcqs` including `createdByUserId`. On 201, return to `/mcq?userId=…`. Missing `userId` → form error, no POST.
 4. **Edit.** Row Actions → Edit (`mcq-list.tsx:194`, `mcqEditHref` at `mcq-paths.ts:15`). Load `GET /api/mcqs/:id`, Save `PUT` without `createdByUserId`.
@@ -857,12 +857,12 @@ No new product files in the original Phase 5 pass. `AGENTS.md` project blurb upd
 - `src/components/mcq-preview.tsx:31` — Preview UI; load GET at `:52`; `checkAnswer` at `:82`; `POST /api/mcq-attempts` at `:98`; Attempts at `:187`; Correct/Incorrect at `:191`; hide Check answer after correct at `:201`
 - `src/components/mcq-preview.test.tsx:85` — no reveal on load; missing user at `:118`; wrong check at `:135`; Attempts then Correct at `:163`
 - `src/components/login-form.tsx:74` — post-login `/mcq?userId=`
-- `src/components/signup-form.tsx:83` — post-register `/mcq?userId=`
+- `src/components/signup-form.tsx` — post-register `/login` (must log in before `/mcq`)
 - `src/components/mcq-stub.tsx` — **removed** in Phase 4
 - `src/components/ui/dropdown-menu.tsx:9` — Actions ellipsis
 - `src/components/ui/textarea.tsx:5` — question stem
 
-Auth landing still uses register/login/logout. Login and register now call `mcqHomeHref` so create can save. `/mcq` still has no session guard.
+Auth landing still uses register/login/logout. Register goes to `/login`; login calls `mcqHomeHref` so create can save. `/mcq` still has no session guard.
 
 ### Implementation Patterns
 
@@ -911,7 +911,7 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 - Do not deploy. Do not apply D1 migrations with `--remote` unless the user explicitly asks. Production `0002` was applied 2026-09-02 on request.
 - Do not hand-edit `cloudflare-env.d.ts`, `next-env.d.ts`, or `package-lock.json`.
 - `/mcq` is still not a protected resource. Visiting `/mcq` without logging in still shows the table. Do not add cookies, JWT, or `localStorage` in this PRD.
-- `createdByUserId` on create and `userId` on attempts are client-supplied until a session sprint exists. Login/register put `user.id` on the URL (`src/lib/mcq-paths.ts:1`). Preview Check answer uses the same `?userId=` as attempt `userId` (`mcq-preview.tsx:103`). Do not store a fake session in `localStorage`.
+- `createdByUserId` on create and `userId` on attempts are client-supplied until a session sprint exists. Login puts `user.id` on the URL (`src/lib/mcq-paths.ts:1`). Register redirects to `/login`; it does not skip authentication. Preview Check answer uses the same `?userId=` as attempt `userId` (`mcq-preview.tsx:103`). Do not store a fake session in `localStorage`.
 - Preview grades from the recorded attempt (`attempt.isCorrect`), not by painting `choice.isCorrect` onto the radios. `GET /api/mcqs/:id` still returns `isCorrect` so Edit can load the form; Preview must not show that on a miss. **Attempts: N** is this Preview visit only (increment after each 201); it does not `GET /api/mcq-attempts` to rebuild history.
 - The create form does not include a Created-by input.
 - There is no `description` column or JSON field. Use `question` for the stem and `name` for the short label.
@@ -976,7 +976,7 @@ Dynamic App Router params for `/mcq/[id]/edit` are `Promise<{ id: string }>` in 
 
 - `src/lib/db.ts` `getDb()` — D1 access
 - `src/lib/services/user-service.ts` — not used for MCQ CRUD HTTP; `users.id` is the FK target for `mcqs.created_by_user_id` and `mcq_attempts.user_id` (existence checks inside MCQ Service)
-- Existing auth UI and `POST /api/auth/logout` — list page logout; login/register now call `mcqHomeHref` (`src/lib/mcq-paths.ts:1`)
+- Existing auth UI and `POST /api/auth/logout` — list page logout; login calls `mcqHomeHref` (`src/lib/mcq-paths.ts:1`); register goes to `/login`
 - `src/lib/mcq-paths.ts` — keeps `userId` on MCQ routes until a session sprint exists
 - Existing shadcn/ui (`table`, `button`, `card`, `field`, `input`, `label`, `dialog`, `badge`)
 - shadcn `dropdown-menu` and `textarea` — added in Phase 4 (`npx shadcn@latest add @shadcn/dropdown-menu @shadcn/textarea`); no new npm packages
@@ -1098,9 +1098,9 @@ Populate with real incidents as they are fixed. Anticipated issues:
 ### Create Save says “Created by user is required”
 
 **Problem**: After login, Create MCQ → Save shows “Created by user is required to save this MCQ.”
-**Cause**: There is no session. `createdByUserId` must come from the URL (`userId`), but login/register used to send the teacher to `/mcq` without it.
-**Solution**: Login/register redirect to `/mcq?userId=` from the returned `user.id`. Create MCQ preserves that query. No cookies, JWT, or `localStorage`.
-**Code Reference**: `src/lib/mcq-paths.ts:1`; `src/components/login-form.tsx:74`; `src/components/signup-form.tsx:83`; `src/components/mcq-list.tsx:137`; `src/app/mcq/new/page.tsx:9`
+**Cause**: There is no session. `createdByUserId` must come from the URL (`userId`), but login used to send the teacher to `/mcq` without it.
+**Solution**: Login redirects to `/mcq?userId=` from the returned `user.id`. Registration goes to `/login` first. Create MCQ preserves that query. No cookies, JWT, or `localStorage`.
+**Code Reference**: `src/lib/mcq-paths.ts:1`; `src/components/login-form.tsx:74`; `src/components/signup-form.tsx`; `src/components/mcq-list.tsx:137`; `src/app/mcq/new/page.tsx:9`
 
 ### Cancel is hard to see next to Save
 

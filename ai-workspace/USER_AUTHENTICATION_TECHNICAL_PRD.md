@@ -361,7 +361,7 @@ Use existing shadcn/ui pieces only: `button`, `card` (`Card`, `CardHeader`, `Car
 - Email helper: “This address is required, must be unique, and can be used later to log in.”
 - Password helper: “Must be at least 8 characters long.” Client `FieldError` if shorter than 8: “Password must be at least 8 characters long”.
 - Submit button label: **Create Account**.
-- On submit: hash password (`src/components/signup-form.tsx:52`), `POST /api/auth/register` with `{ firstName, lastName, username, email, password }`, on 201 `router.push("/mcq")`.
+- On submit: hash password (`src/components/signup-form.tsx:52`), `POST /api/auth/register` with `{ firstName, lastName, username, email, password }`, on 201 `router.push("/login")`. The teacher must then log in; registration does not open `/mcq`.
 - Surface 400 and 409 on the form (including “Username is already taken” and “Email is already taken”); do not navigate on failure.
 - Footer: “Already have an account?” with `Link` to `/login` (“Sign in”).
 
@@ -521,7 +521,7 @@ Every implementation phase below follows the **TDD** cycle in Testing: write tes
 1. Propose `@testing-library/user-event` if it is not already installed.
 2. Add Client Component tests (`*.test.tsx`) that query by role and accessible name:
    - Login form: exactly two fields (username or email, then password); no separate email field; submit hashes the password before `fetch`; navigates to `/mcq` on 200; shows the generic 401 message on failure
-   - Register form: username and email are both required; submit hashes the password before `fetch`; navigates to `/mcq` on 201; surfaces 409 duplicate username and duplicate email
+   - Register form: username and email are both required; submit hashes the password before `fetch`; navigates to `/login` on 201 (not `/mcq`); surfaces 409 duplicate username and duplicate email
    - MCQ stub: shows placeholder copy (no MCQ CRUD); logout control calls `POST /api/auth/logout` and navigates to `/login`
 3. Mock `fetch` and navigation. Do not boot Next.js or D1.
 4. Run `npm test`. Expect **red**.
@@ -545,7 +545,7 @@ Every implementation phase below follows the **TDD** cycle in Testing: write tes
 - `src/app/page.tsx:4` — `redirect("/login")`
 - `src/app/layout.tsx:15` — title “Quiz Maker”
 - `src/app/login/page.tsx:3` + `src/components/login-form.tsx:25` — two fields (`identifier`, `password`); hash at `login-form.tsx:49` then `POST /api/auth/login`; `router.push("/mcq")` on 200; `FieldError` for 401
-- `src/app/register/page.tsx:3` + `src/components/signup-form.tsx:24` — first/last/username/email/password; hash at `signup-form.tsx:52` then `POST /api/auth/register`; `router.push("/mcq")` on 201
+- `src/app/register/page.tsx:3` + `src/components/signup-form.tsx:24` — first/last/username/email/password; hash at `signup-form.tsx:52` then `POST /api/auth/register`; `router.push("/login")` on 201
 - `src/app/mcq/page.tsx:4` + `src/components/mcq-stub.tsx:14` — test-bank placeholder; **Log out** at `mcq-stub.tsx:18` (`POST /api/auth/logout`, then `/login` even on failure)
 - Tests: `login-form.test.tsx`, `signup-form.test.tsx`, `mcq-stub.test.tsx`
 
@@ -565,7 +565,7 @@ This phase does not add a new red suite. It runs the accumulated tests as the co
 **Implementation / verification:**
 
 1. Run `npm run lint` and `npm run build` and record the actual result
-2. Exercise register → `/mcq` → logout → login (by username) → `/mcq` and login (by email)
+2. Exercise register → `/login` → login (by username) → `/mcq` and login (by email)
 3. Confirm duplicate username and duplicate email are rejected; wrong credentials do not leak which identifier exists
 4. Confirm D1 stores only hashes
 
@@ -751,7 +751,7 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 - [x] Login with the registered email and correct password returns 200 and redirects to `/mcq`
 - [x] Login with a wrong password or unknown identifier returns 401 with `{ "error": "Invalid username/email or password" }`
 - [x] User Service supports create, update, retrieve (by id, by username, by email, and by login identifier), and delete
-- [x] Successful registration redirects to `/mcq` — unit tests and **manual verification 2026-09-02**
+- [x] Successful registration redirects to `/login` so the teacher must authenticate before `/mcq` — unit tests 2026-09-03
 - [x] Successful login redirects to `/mcq` — unit tests and **manual verification 2026-09-02**
 - [x] `/mcq` is a stub (no MCQ CRUD) and offers logout
 - [x] Logout calls `POST /api/auth/logout` and returns the teacher to `/login` — unit tests and **manual verification 2026-09-02**
@@ -772,9 +772,9 @@ VALUES (?1, ?2, ?3, ?4, ?5);
 | -------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------- |
 | Distinct teacher accounts  | 2+ users can register with different usernames and emails        | Insert two users via the register UI and confirm two rows in `users` |
 | Plaintext password leakage | 0 plaintext passwords in D1 or API responses                     | Inspect `password_hash` column and JSON responses                    |
-| Auth completion            | Register or login reaches `/mcq` without a server error          | Manual flow on local preview                                         |
+| Auth completion            | Register then login, or existing-user login, reaches `/mcq`      | Manual flow on local preview                                         |
 | Duplicate identity         | 100% of duplicate usernames and duplicate emails rejected        | Repeat register with the same username or the same email, expect 409 |
-| Time to first identity     | A new teacher can register and land on `/mcq` in under 2 minutes | Stopwatch on the happy path                                          |
+| Time to first identity     | A new teacher can register, log in, and land on `/mcq` in under 2 minutes | Stopwatch on the happy path                                          |
 | Unit tests                 | `npm test` exits 0 with no skipped hollow assertions             | Vitest run in Phase 5                                                |
 
 
@@ -946,7 +946,7 @@ When working with this PRD:
 
 ## Current Status
 
-**Last Updated**: 2026-09-02
+**Last Updated**: 2026-09-03
 **Current Phase**: Phase 5 - Verification
 **Status**: COMPLETED
-**Next Steps**: Auth foundation is complete. No further product-code work for this foundation unless a new gap is found.
+**Next Steps**: Auth foundation is complete. 2026-09-03: successful registration redirects to `/login`; only a successful login opens `/mcq`. Existing users still log in directly.

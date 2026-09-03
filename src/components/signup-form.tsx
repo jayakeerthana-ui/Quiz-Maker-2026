@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { sha256Hex } from "@/lib/password";
-import { mcqHomeHref } from "@/lib/mcq-paths";
 
 export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 	const router = useRouter();
@@ -64,7 +63,6 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 			});
 			const payload = (await response.json().catch(() => null)) as {
 				error?: unknown;
-				user?: { id?: unknown };
 			} | null;
 
 			if (!response.ok) {
@@ -76,11 +74,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 				return;
 			}
 
-			const userId =
-				typeof payload?.user?.id === "string" && payload.user.id.length > 0
-					? payload.user.id
-					: undefined;
-			router.push(mcqHomeHref(userId));
+			router.push("/login");
 		} catch {
 			setError("Unable to register");
 		} finally {
